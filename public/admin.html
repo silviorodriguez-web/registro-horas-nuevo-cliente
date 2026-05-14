@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supervisión de Horas — Humand</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --brand:#3B5FBF; --brand-l:#EEF2FF; --brand-d:#1E3A8A; --brand-mid:#6080D8;
+  --bg:#F4F5F8; --card:#FFF; --text:#1A1B2E; --muted:#6B7280;
+  --border:rgba(0,0,0,0.08); --border-med:rgba(0,0,0,0.14);
+  --success:#059669; --s-bg:#ECFDF5; --s-dk:#064E3B;
+  --warn:#D97706; --w-bg:#FFFBEB;
+  --err:#DC2626; --e-bg:#FEF2F2;
+  --r:10px; --rl:14px;
+  --sh:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
+  --sh2:0 4px 16px rgba(0,0,0,.09),0 2px 4px rgba(0,0,0,.04);
+}
+body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); background:var(--bg); min-height:100vh; }
+.topbar { background:var(--brand-d); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+.logo { display:flex; align-items:center; gap:10px; color:#fff; font-size:15px; font-weight:600; letter-spacing:-.2px; }
+.logo-mark { width:30px; height:30px; background:var(--brand-mid); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; }
+.topbar-r { display:flex; align-items:center; gap:12px; }
+.user-pill { display:flex; align-items:center; gap:8px; color:rgba(255,255,255,.85); font-size:13px; }
+.av { width:32px; height:32px; border-radius:50%; background:var(--brand-mid); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#fff; letter-spacing:.5px; }
+.back-link { padding:5px 12px; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2); border-radius:6px; color:rgba(255,255,255,.8); font-size:12px; text-decoration:none; font-family:'DM Sans',sans-serif; transition:.15s; }
+.back-link:hover { background:rgba(255,255,255,.18); }
+.main { padding:24px; max-width:1140px; margin:0 auto; }
+.page-hd { margin-bottom:20px; }
+.page-hd h1 { font-size:21px; font-weight:600; letter-spacing:-.3px; margin-bottom:4px; }
+.page-hd p { font-size:13px; color:var(--muted); line-height:1.5; }
+.card { background:var(--card); border-radius:var(--rl); border:1px solid var(--border); box-shadow:var(--sh); margin-bottom:14px; overflow:hidden; }
+.card-hd { padding:14px 20px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
+.card-hd .sub { font-size:11px; color:var(--muted); font-weight:400; }
+.badge { padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+.bp { background:var(--w-bg); color:var(--warn); }
+.ba { background:var(--s-bg); color:var(--success); }
+.br { background:var(--e-bg); color:var(--err); }
+.btn { padding:9px 18px; border-radius:var(--r); font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border-med); font-family:'DM Sans',sans-serif; transition:.15s; color:var(--text); background:#fff; }
+.btn:hover { background:var(--bg); }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.btn-approve { background:var(--success); color:#fff; border-color:var(--success); }
+.btn-approve:hover:not(:disabled) { background:var(--s-dk); }
+.btn-delete { background:var(--e-bg); color:var(--err); border-color:rgba(220,38,38,.3); }
+.btn-delete:hover:not(:disabled) { background:var(--err); color:#fff; border-color:var(--err); }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.btn-icon { background:none; border:none; cursor:pointer; padding:5px 7px; border-radius:6px; font-size:14px; color:var(--muted); transition:.1s; font-family:'DM Sans',sans-serif; }
+.btn-icon:hover.del { color:var(--err); background:var(--e-bg); }
+.btn-icon:hover.edit { color:var(--brand); background:var(--brand-l); }
+.btn-icon:hover.save-ok { color:var(--success); background:var(--s-bg); }
+.action-bar { padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; background:#fafbff; }
+.alert { padding:11px 16px; border-radius:0 var(--r) var(--r) 0; font-size:12px; line-height:1.6; margin:0 20px 14px; border-left:3px solid; }
+.alert-info { background:var(--brand-l); color:var(--brand-d); border-color:var(--brand); }
+.alert-success { background:var(--s-bg); color:var(--s-dk); border-color:var(--success); }
+.alert-warn { background:var(--w-bg); color:var(--warn); border-color:var(--warn); }
+.stats-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px; }
+.filter-bar { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.filter-bar label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+.filter-inp { padding:5px 10px; border:1px solid var(--border-med); border-radius:var(--r); font-size:12px; font-family:'DM Sans',sans-serif; color:var(--text); background:#fff; outline:none; }
+.filter-inp:focus { border-color:var(--brand); box-shadow:0 0 0 2px rgba(59,95,191,.1); }
+.filter-active { border-color:var(--brand); background:var(--brand-l); color:var(--brand-d); }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:16px 18px; box-shadow:var(--sh); }
+.stat-card .sl { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+.stat-card .sv { font-size:28px; font-weight:600; }
+.super-layout { display:grid; grid-template-columns:300px 1fr; gap:16px; align-items:start; }
+.req-list-title { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+.req-row { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:13px 15px; cursor:pointer; transition:.15s; margin-bottom:7px; }
+.req-row:hover { border-color:var(--brand-mid); box-shadow:var(--sh2); }
+.req-row.selected { border-color:var(--brand); border-width:1.5px; background:var(--brand-l); }
+.req-name { font-size:13px; font-weight:600; }
+.req-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+.req-footer { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.mod-dot { width:6px; height:6px; border-radius:50%; background:var(--warn); display:inline-block; margin-left:5px; vertical-align:middle; }
+.detail-panel { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); box-shadow:var(--sh); overflow:hidden; }
+.detail-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:#fafbff; }
+.detail-title { font-size:15px; font-weight:600; }
+.detail-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+.entries-tbl { width:100%; border-collapse:collapse; }
+.entries-tbl th { text-align:left; font-size:10px; font-weight:600; color:var(--muted); padding:9px 13px; background:var(--brand-l); text-transform:uppercase; letter-spacing:.5px; }
+.entries-tbl td { border-bottom:1px solid var(--border); vertical-align:middle; padding:0; }
+.entries-tbl tr:last-child td { border-bottom:none; }
+.entries-tbl tr.editing-row { background:#fffbeb; }
+.cell-v { padding:10px 13px; font-size:13px; }
+.cell-v.muted { color:var(--muted); font-size:12px; }
+.cell-v.hrs { font-weight:600; color:var(--brand-d); font-family:'DM Mono',monospace; font-size:12px; }
+.cell-inp { width:100%; padding:9px 11px; border:none; border-right:1px solid var(--border); background:transparent; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; color:var(--text); }
+.cell-inp:focus { background:#fff8e1; outline:2px solid var(--warn); outline-offset:-2px; }
+.cell-sel { width:100%; padding:9px 9px; border:none; border-right:1px solid var(--border); background:transparent; font-size:12px; font-family:'DM Sans',sans-serif; outline:none; color:var(--text); cursor:pointer; }
+.cell-sel:focus { background:#fff8e1; outline:2px solid var(--warn); outline-offset:-2px; }
+.cell-time { width:100%; padding:9px 8px; border:none; border-right:1px solid var(--border); background:transparent; font-size:13px; font-family:'DM Mono',monospace; outline:none; color:var(--text); }
+.cell-time:focus { background:#fff8e1; outline:2px solid var(--warn); outline-offset:-2px; }
+.row-acts { display:flex; gap:3px; padding:6px 10px; justify-content:center; }
+.totals-row { display:flex; gap:20px; padding:12px 20px; border-top:1px solid var(--border); background:var(--brand-l); }
+.ti .tl { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.ti .tv { font-size:18px; font-weight:600; color:var(--brand-d); }
+.feedback-area { padding:14px 20px; border-top:1px solid var(--border); }
+.feedback-area label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; display:block; margin-bottom:7px; }
+textarea { width:100%; padding:9px 12px; border:1px solid var(--border-med); border-radius:var(--r); font-size:13px; font-family:'DM Sans',sans-serif; resize:none; outline:none; color:var(--text); background:#fff; transition:border-color .15s, box-shadow .15s; }
+textarea:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(59,95,191,.1); }
+.empty { text-align:center; padding:32px 20px; color:var(--muted); font-size:13px; }
+.detail-empty { display:flex; align-items:center; justify-content:center; min-height:280px; color:var(--muted); font-size:13px; border:1.5px dashed var(--border-med); border-radius:var(--rl); flex-direction:column; gap:8px; }
+code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,191,.1); padding:1px 5px; border-radius:4px; color:var(--brand-d); }
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.sup-bar { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); box-shadow:var(--sh); padding:14px 20px; margin-bottom:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.sup-bar label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+.sup-select { padding:7px 12px; border:1px solid var(--border-med); border-radius:var(--r); font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text); background:#fff; outline:none; min-width:220px; cursor:pointer; transition:border-color .15s; }
+.sup-select:focus { border-color:var(--brand); box-shadow:0 0 0 2px rgba(59,95,191,.1); }
+.sup-select.selected { border-color:var(--success); background:var(--s-bg); color:var(--s-dk); font-weight:600; }
+.sup-hint { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">H</div>
+    Panel de Supervisión
+  </div>
+  <div class="topbar-r">
+    <a href="/" class="back-link">← Vista colaborador</a>
+    <div class="user-pill">
+      <div class="av">SP</div>
+      <span>Supervisor</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-hd">
+    <h1>Revisión de horas</h1>
+    <p>Revisá y editá si es necesario. Al aprobar se registra en Humand Time Tracking.</p>
+  </div>
+
+  <div class="sup-bar">
+    <label>Supervisor que aprueba</label>
+    <select id="sel-supervisor" class="sup-select" onchange="onSupervisorChange(this)">
+      <option value="">Cargando supervisores...</option>
+    </select>
+    <span class="sup-hint" id="sup-hint">Seleccioná tu nombre antes de aprobar</span>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="sl">Pendientes</div><div class="sv" style="color:var(--warn)" id="stat-p">0</div></div>
+    <div class="stat-card"><div class="sl">Aprobados</div><div class="sv" style="color:var(--success)" id="stat-a">0</div></div>
+  </div>
+
+  <div class="super-layout">
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div class="req-list-title" style="margin-bottom:0">Solicitudes</div>
+        <button class="btn btn-sm" onclick="recargar()" title="Recargar desde el navegador" style="font-size:11px;padding:4px 10px">↻ Recargar</button>
+      </div>
+      <div class="filter-bar">
+        <label>Fecha de carga</label>
+        <input type="date" class="filter-inp" id="filter-date" onchange="setFilter(this.value)">
+        <button class="btn btn-sm" onclick="setFilterHoy()" style="font-size:11px;padding:4px 10px">Hoy</button>
+        <button class="btn btn-sm" onclick="clearFilter()" style="font-size:11px;padding:4px 10px;display:none" id="btn-clear-filter">✕ Todos</button>
+      </div>
+      <div id="req-list"></div>
+    </div>
+    <div>
+      <div class="detail-empty" id="det-empty">
+        <div style="font-size:32px">📋</div>
+        Seleccioná una solicitud para revisar
+      </div>
+      <div id="det-panel" class="detail-panel" style="display:none">
+        <div class="detail-header">
+          <div>
+            <div class="detail-title" id="dp-name">—</div>
+            <div class="detail-sub" id="dp-sub">—</div>
+          </div>
+          <span class="badge" id="dp-badge">—</span>
+        </div>
+        <div class="alert alert-info" id="dp-hint" style="margin-top:14px">
+          Hacé click en ✎ para editar cualquier fila. Confirmá con ✓ antes de aprobar.
+        </div>
+        <div class="alert alert-warn" id="dp-dirty" style="display:none;margin-top:6px">
+          Hay filas en edición sin guardar. Confirmá los cambios antes de aprobar.
+        </div>
+        <table class="entries-tbl" style="margin-top:8px">
+          <thead>
+            <tr>
+              <th style="width:30%">Proyecto</th>
+              <th style="width:14%">Día</th>
+              <th style="width:10%">Desde</th>
+              <th style="width:10%">Hasta</th>
+              <th style="width:9%">Horas</th>
+              <th style="width:27%">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="entries-tbody"></tbody>
+        </table>
+        <div class="totals-row">
+          <div class="ti"><div class="tl">Total horas</div><div class="tv" id="dp-h">—</div></div>
+          <div class="ti" style="margin-left:14px"><div class="tl">Entradas</div><div class="tv" id="dp-e">—</div></div>
+          <div class="ti" style="margin-left:14px"><div class="tl">Proyectos</div><div class="tv" id="dp-p">—</div></div>
+        </div>
+        <div class="feedback-area">
+          <label>Comentario (opcional)</label>
+          <textarea id="dp-comment" rows="2" placeholder="Ej: aprobado con modificaciones, se corrigió el horario del lunes..."></textarea>
+        </div>
+        <div class="action-bar">
+          <button class="btn btn-delete btn-sm" id="btn-del" onclick="deleteSubmission()">✕ Borrar solicitud</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="closeDetail()">Cerrar</button>
+            <button class="btn btn-approve btn-sm" id="btn-appr" onclick="approveReq()">Aprobar y migrar a Time Tracking →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var PROXY    = '/api/humand';
+var PROJECTS = ['AFISA','Centro de Contacto','DINAVI','Isla de Flores','MEVIR','Promociones','Recupero BROU','UPLA','Cobranza Consumo','Experiencia al cliente'];
+var LS_KEY   = 'humand-horas-v5';
+
+// ── ESTADO ──
+var requests          = [];
+var selectedId        = null;
+var editingRows       = {};
+var filterDate        = null;
+var selectedSupervisor = null; // { id, name }
+
+// ── UTILS ──
+function calcH(f,t){
+  var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1];
+  return Math.max(0,Math.round(((th*60+tm-fh*60-fm)/60)*10)/10);
+}
+function totalH(ents){ return Math.round(ents.reduce(function(s,e){return s+calcH(e.from,e.to);},0)*10)/10; }
+function uniqueP(ents){ return new Set(ents.map(function(e){return e.project;})).size; }
+function statusLabel(s){ return {pending:'Pendiente',approved:'Aprobado'}[s]||s; }
+function statusClass(s){ return {pending:'bp',approved:'ba'}[s]||'bp'; }
+function fmtDate(iso){
+  if(!iso) return '';
+  try { return new Date(iso).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+  catch(e){ return ''; }
+}
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+(String(d.getMonth()+1).padStart(2,'0'))+'-'+(String(d.getDate()).padStart(2,'0')); }
+// Filtra por supervisor activo y opcionalmente por fecha
+function filteredRequests(){
+  if(!selectedSupervisor) return null; // null = aún no seleccionó supervisor
+  var filtered;
+  if(selectedSupervisor.id) {
+    // Supervisor identificado: mostrar solo sus solicitudes
+    filtered = requests.filter(function(r){
+      return r.supervisorId && String(r.supervisorId) === String(selectedSupervisor.id);
+    });
+  } else {
+    // Fallback manual: mostrar todas las solicitudes que tienen supervisorId
+    filtered = requests.filter(function(r){ return r.supervisorId; });
+  }
+  if(filterDate){
+    filtered = filtered.filter(function(r){ return r.submittedAt && r.submittedAt.slice(0,10)===filterDate; });
+  }
+  return filtered;
+}
+function setFilter(d){
+  filterDate = d||null;
+  document.getElementById('btn-clear-filter').style.display = filterDate?'':'none';
+  if(filterDate) document.getElementById('filter-date').classList.add('filter-active');
+  else document.getElementById('filter-date').classList.remove('filter-active');
+  renderReqList();
+}
+function setFilterHoy(){ var t=todayISO(); document.getElementById('filter-date').value=t; setFilter(t); }
+function clearFilter(){ document.getElementById('filter-date').value=''; setFilter(null); }
+function fmtDay(d){
+  if(!d) return '—';
+  if(d.indexOf('-')<0) return d; // ya formateado como texto
+  try { return new Date(d+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'}); }
+  catch(e){ return d; }
+}
+// Convierte date YYYY-MM-DD + time HH:MM a UTC ISO (formato que espera Humand API)
+function toISOLocal(dateStr, timeStr){
+  return new Date(dateStr+'T'+timeStr+':00').toISOString();
+}
+
+// ── SUPERVISORES ──
+function cargarSupervisores(){
+  var sel = document.getElementById('sel-supervisor');
+  // Paso 1: listar segmentaciones para encontrar "Supervisores (No borrar)"
+  apiCall('/segmentations', null, 'GET')
+    .then(function(data){
+      var items = data.items || data || [];
+      // Buscar la segmentación cuyo nombre incluya "Supervisores"
+      var seg = items.find(function(s){
+        return s.name && s.name.toLowerCase().includes('supervisores');
+      });
+      if (!seg) throw new Error('Segmentación Supervisores no encontrada');
+      // seg puede tener .segmentationItems[] o .items[] con los IDs
+      var segItems = seg.segmentationItems || seg.items || [];
+      if (!segItems.length) throw new Error('Sin items en segmentación Supervisores');
+      var ids = segItems.map(function(i){ return i.id; }).join(',');
+      return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 100 }, 'GET');
+    })
+    .then(function(data){
+      var users = data.items || data || [];
+      if (!users.length) throw new Error('Sin usuarios supervisores');
+      sel.innerHTML = '<option value="">Seleccioná tu nombre...</option>' +
+        users.map(function(u){
+          return '<option value="'+u.id+'" data-name="'+u.firstName+' '+u.lastName+'">' +
+            u.firstName+' '+u.lastName+'</option>';
+        }).join('');
+    })
+    .catch(function(err){
+      console.warn('[supervisores]', err.message);
+      // Fallback: entrada manual
+      sel.innerHTML = '<option value="">— No se pudo cargar la lista —</option>';
+      sel.insertAdjacentHTML('afterend',
+        '<input type="text" id="sup-manual" placeholder="Escribí tu nombre completo" '+
+        'style="padding:7px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;min-width:220px" '+
+        'oninput="onSupervisorManual(this.value)">');
+      sel.style.display = 'none';
+      document.getElementById('sup-hint').textContent = 'Escribí tu nombre para identificar la aprobación';
+    });
+}
+
+function onSupervisorChange(sel){
+  var opt = sel.options[sel.selectedIndex];
+  if (opt && opt.value) {
+    selectedSupervisor = { id: opt.value, name: opt.getAttribute('data-name') };
+    sel.className = 'sup-select selected';
+    document.getElementById('sup-hint').textContent = '✓ Mostrando equipo de ' + selectedSupervisor.name;
+  } else {
+    selectedSupervisor = null;
+    sel.className = 'sup-select';
+    document.getElementById('sup-hint').textContent = 'Seleccioná tu nombre para ver tu equipo';
+  }
+  closeDetail();
+  renderReqList();
+}
+
+function onSupervisorManual(val){
+  var v = val.trim();
+  selectedSupervisor = v ? { id: null, name: v } : null;
+  var hint = document.getElementById('sup-hint');
+  hint.textContent = v ? '✓ Aprobando como ' + v : 'Escribí tu nombre para identificar la aprobación';
+  closeDetail();
+  renderReqList();
+}
+
+// ── PROXY CALL ──
+function apiCall(path, params, method, body){
+  method = method||'GET';
+  var qs  = params ? '&'+new URLSearchParams(params).toString() : '';
+  var url = PROXY+'?path='+encodeURIComponent(path)+qs;
+  var opts = {method:method, headers:{'Content-Type':'application/json'}};
+  if(body) opts.body = JSON.stringify(body);
+  return fetch(url,opts).then(function(r){ return r.json(); });
+}
+
+// ── PERSISTENCIA ──
+function saveSubmissions(){ localStorage.setItem(LS_KEY, JSON.stringify(requests)); }
+
+// Sincroniza una submission modificada al KV (fire-and-forget)
+function saveSubmissionToKV(sub){
+  fetch('/api/submissions?id=' + sub.id, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(sub)
+  }).catch(function(){/* no-op: ya persiste en localStorage */});
+}
+
+function recargar(){
+  fetch('/api/submissions')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      requests = data;
+      localStorage.setItem(LS_KEY, JSON.stringify(requests));
+      _afterRecargar();
+    })
+    .catch(function(){
+      requests = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+      _afterRecargar();
+    });
+}
+
+function _afterRecargar(){
+  selectedId = null; editingRows = {};
+  document.getElementById('det-panel').style.display='none';
+  document.getElementById('det-empty').style.display='flex';
+  renderReqList();
+}
+
+// ── RENDER LISTA ──
+function renderReqList(){
+  var l = document.getElementById('req-list');
+  var vis = filteredRequests();
+  if(vis === null){
+    l.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:10px 0;line-height:1.7">'+
+      '← Seleccioná tu nombre<br><span style="font-size:11px">para ver las solicitudes de tu equipo.</span></div>';
+    document.getElementById('stat-p').textContent='—';
+    document.getElementById('stat-a').textContent='—';
+    return;
+  }
+  if(!vis.length){
+    var msg = filterDate
+      ? '<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin solicitudes para esa fecha.</div>'
+      : '<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin solicitudes pendientes de tu equipo.<br><span style="font-size:11px">Los colaboradores envían desde <a href="/" style="color:var(--brand)">la vista principal</a>.</span></div>';
+    l.innerHTML = msg;
+    document.getElementById('stat-p').textContent='0';
+    document.getElementById('stat-a').textContent='0';
+    return;
+  }
+  l.innerHTML = vis.map(function(r){
+    var sel = selectedId===r.id;
+    var dateLabel = r.submittedAt ? '<span style="font-size:10px;color:var(--muted)"> · '+fmtDate(r.submittedAt)+'</span>' : '';
+    return '<div class="req-row'+(sel?' selected':'')+'" onclick="selectReq('+r.id+')">' +
+      '<div class="req-name">'+r.employeeName+(r.modified?'<span class="mod-dot"></span>':'')+'</div>' +
+      '<div class="req-meta">'+r.periodo+dateLabel+'</div>' +
+      '<div class="req-footer">' +
+        '<span style="font-size:12px;font-weight:600;color:var(--brand-d)">'+totalH(r.entries)+' hs</span>' +
+        '<span class="badge '+statusClass(r.status)+'">'+statusLabel(r.status)+'</span>' +
+      '</div></div>';
+  }).join('');
+  document.getElementById('stat-p').textContent=vis.filter(function(r){return r.status==='pending';}).length;
+  document.getElementById('stat-a').textContent=vis.filter(function(r){return r.status==='approved';}).length;
+}
+
+function selectReq(id){ selectedId=id; editingRows={}; renderReqList(); renderDetail(); }
+
+function renderDetail(){
+  var r = requests.find(function(x){return x.id===selectedId;});
+  if(!r) return;
+  var ro = r.status!=='pending';
+  document.getElementById('det-empty').style.display='none';
+  document.getElementById('det-panel').style.display='block';
+  document.getElementById('dp-name').textContent  = r.employeeName;
+  var dateStr = r.submittedAt ? ' · cargado '+fmtDate(r.submittedAt) : '';
+  document.getElementById('dp-sub').textContent   = r.periodo+' · '+r.totalHoras+' hs'+dateStr;
+  document.getElementById('dp-badge').className   = 'badge '+statusClass(r.status);
+  document.getElementById('dp-badge').textContent = statusLabel(r.status);
+  document.getElementById('btn-appr').style.display = ro?'none':'';
+  document.getElementById('dp-dirty').style.display = 'none';
+
+  var hint = document.getElementById('dp-hint');
+  if(ro){
+    hint.className = 'alert alert-success';
+    hint.style.display = 'block';
+    hint.innerHTML = '✓ Aprobado. Entradas registradas en Humand Time Tracking.'+(r.modified?' <strong>Con modificaciones.</strong>':'')+(r.approvedBy?' Aprobado por: <strong>'+r.approvedBy+'</strong>.':'');
+  } else {
+    hint.className='alert alert-info'; hint.style.display='block';
+    hint.innerHTML='Hacé click en ✎ para editar cualquier fila. Confirmá con ✓ antes de aprobar.';
+  }
+
+  document.getElementById('dp-comment').value = r.comment||'';
+  renderEntriesTable(r, ro);
+  updateTotals(r);
+}
+
+function renderEntriesTable(r, ro){
+  var tbody = document.getElementById('entries-tbody');
+  tbody.innerHTML = r.entries.map(function(e){
+    var h = calcH(e.from,e.to);
+    if(editingRows[e.id] && !ro){
+      return '<tr class="editing-row" id="erow-'+e.id+'">' +
+        '<td><select class="cell-sel" id="ep-'+e.id+'">' +
+          PROJECTS.map(function(p){return '<option'+(p===e.project?' selected':'')+'>'+p+'</option>';}).join('') +
+        '</select></td>' +
+        '<td><input type="date" class="cell-inp" id="ed-'+e.id+'" value="'+e.day+'" style="border-right:1px solid var(--border)"></td>' +
+        '<td><input type="time" class="cell-time" id="ef-'+e.id+'" value="'+e.from+'" oninput="rfH('+e.id+')"></td>' +
+        '<td><input type="time" class="cell-time" id="et-'+e.id+'" value="'+e.to+'"   oninput="rfH('+e.id+')"></td>' +
+        '<td><div class="cell-v hrs" id="eh-'+e.id+'">'+h+' hs</div></td>' +
+        '<td><div class="row-acts">' +
+          '<button class="btn-icon save-ok" title="Guardar" onclick="saveRow('+r.id+','+e.id+')">✓</button>' +
+          '<button class="btn-icon del"     title="Cancelar" onclick="cancelEdit('+e.id+')">✕</button>' +
+        '</div></td></tr>';
+    }
+    return '<tr id="erow-'+e.id+'">' +
+      '<td><div class="cell-v" style="font-size:12px">'+e.project+'</div></td>' +
+      '<td><div class="cell-v muted">'+fmtDay(e.day)+'</div></td>' +
+      '<td><div class="cell-v">'+e.from+'</div></td>' +
+      '<td><div class="cell-v">'+e.to+'</div></td>' +
+      '<td><div class="cell-v hrs">'+h+' hs</div></td>' +
+      '<td><div class="row-acts">'+(ro
+        ? '<span style="font-size:11px;color:var(--muted)">—</span>'
+        : '<button class="btn-icon edit" title="Editar"   onclick="editRow('+r.id+','+e.id+')">✎</button>' +
+          '<button class="btn-icon del"  title="Eliminar" onclick="deleteRow('+r.id+','+e.id+')">✕</button>'
+      )+'</div></td></tr>';
+  }).join('');
+}
+
+function rfH(eid){
+  var f=document.getElementById('ef-'+eid),t=document.getElementById('et-'+eid),h=document.getElementById('eh-'+eid);
+  if(f&&t&&h) h.textContent=calcH(f.value,t.value)+' hs';
+}
+function editRow(rid,eid){ editingRows[eid]=true; checkDirty(); renderEntriesTable(requests.find(function(x){return x.id===rid;}),false); }
+function cancelEdit(eid){ delete editingRows[eid]; checkDirty(); renderEntriesTable(requests.find(function(x){return x.id===selectedId;}),false); }
+
+function saveRow(rid,eid){
+  var r=requests.find(function(x){return x.id===rid;}),e=r.entries.find(function(x){return x.id===eid;});
+  var np=document.getElementById('ep-'+eid),nd=document.getElementById('ed-'+eid);
+  var nf=document.getElementById('ef-'+eid),nt=document.getElementById('et-'+eid);
+  if(np) e.project=np.value;
+  if(nd) e.day=nd.value; // YYYY-MM-DD
+  if(nf) e.from=nf.value;
+  if(nt) e.to=nt.value;
+  r.modified=true;
+  saveSubmissions();
+  saveSubmissionToKV(r);
+  delete editingRows[eid];
+  checkDirty(); renderEntriesTable(r,false); updateTotals(r); renderReqList();
+}
+
+function deleteRow(rid,eid){
+  var r=requests.find(function(x){return x.id===rid;});
+  if(r.entries.length<=1){alert('Debe quedar al menos una entrada.');return;}
+  r.entries=r.entries.filter(function(e){return e.id!==eid;});
+  r.modified=true;
+  saveSubmissions();
+  saveSubmissionToKV(r);
+  delete editingRows[eid];
+  checkDirty(); renderEntriesTable(r,false); updateTotals(r); renderReqList();
+}
+
+function checkDirty(){
+  document.getElementById('dp-dirty').style.display=Object.keys(editingRows).length?'block':'none';
+}
+function updateTotals(r){
+  document.getElementById('dp-h').textContent=totalH(r.entries)+' hs';
+  document.getElementById('dp-e').textContent=r.entries.length;
+  document.getElementById('dp-p').textContent=uniqueP(r.entries);
+}
+
+// ── APROBAR → clockIn + clockOut por cada entrada ──
+function approveReq(){
+  if(Object.keys(editingRows).length){alert('Guardá todas las filas en edición antes de aprobar.');return;}
+  if(!selectedSupervisor){
+    alert('Seleccioná el supervisor que aprueba antes de continuar.\n(Ver el selector "Supervisor que aprueba" en la parte superior)');
+    document.getElementById('sel-supervisor').focus();
+    return;
+  }
+  var r=requests.find(function(x){return x.id===selectedId;});
+  if(!r) return;
+  if(!r.employeeId){
+    alert('Esta solicitud no tiene un ID de empleado válido.\nEl colaborador debe seleccionar su usuario antes de enviar.');
+    return;
+  }
+
+  // Verificar que ningún clockOut sea futuro — Humand no permite entradas futuras
+  var ahora = Date.now();
+  var entradasFuturas = r.entries.filter(function(e){
+    return new Date(e.day+'T'+e.to+':00').getTime() > ahora;
+  });
+  if(entradasFuturas.length){
+    var lineas = entradasFuturas.map(function(e){ return '• '+fmtDay(e.day)+' — salida '+e.to; }).join('\n');
+    alert('No se puede aprobar: las siguientes entradas tienen hora de salida que aún no pasó:\n\n'+lineas+'\n\nHumand no permite registrar horas futuras. Esperá a que pasen esos horarios o corregí las horas.');
+    return;
+  }
+
+  var btn=document.getElementById('btn-appr'), btnDel=document.getElementById('btn-del');
+  btn.innerHTML='<span class="spinner"></span>Procesando...'; btn.disabled=true; btnDel.disabled=true;
+
+  var ttLog = [];
+
+  var DUPLICATE = 'TIME_TRACKING_ENTRY_DUPLICATE';
+
+  function doClockIn(eid, e, comment, retry){
+    return apiCall('/time-tracking/entries/clockIn',null,'POST',{
+      employeeId: String(eid), now: toISOLocal(e.day, e.from), comment: comment
+    }).then(function(res){
+      if(res && res.code===DUPLICATE){
+        if(retry){
+          // Segundo DUPLICATE tras intento de cierre → la entrada ya existe completa en Humand → omitir
+          return { _alreadyExists: true };
+        }
+        // Primer DUPLICATE: intentar cerrar la entrada abierta con clockOut
+        return apiCall('/time-tracking/entries/clockOut',null,'POST',{
+          employeeId: String(eid), now: toISOLocal(e.day, e.from), comment: 'cierre automático'
+        }).then(function(closeRes){
+          if(closeRes && closeRes.code===DUPLICATE){
+            // clockOut también falla → entrada ya completa en Humand → omitir
+            return { _alreadyExists: true };
+          }
+          return doClockIn(eid, e, comment, true);
+        });
+      }
+      return res;
+    });
+  }
+
+  function processEntry(eid, i){
+    if(i>=r.entries.length) return Promise.resolve();
+    var e=r.entries[i];
+    var baseComment = (e.project+(e.desc?' — '+e.desc:'')).substring(0,150);
+    var commentIn   = baseComment;
+    var commentOut  = (baseComment + ' | Aprobado por: ' + selectedSupervisor.name).substring(0,200);
+    return doClockIn(eid, e, commentIn, false).then(function(res){
+      if(res && res._alreadyExists){
+        ttLog.push('IN['+(i+1)+']: ya existía en Time Tracking, omitido');
+        return processEntry(eid, i+1);
+      }
+      ttLog.push('IN['+(i+1)+']: '+JSON.stringify(res));
+      if(!res || !res.id) throw new Error('clockIn entrada '+(i+1)+'\nID: '+eid+'\nRespuesta: '+JSON.stringify(res));
+      return apiCall('/time-tracking/entries/clockOut',null,'POST',{
+        employeeId: String(eid), now: toISOLocal(e.day, e.to), comment: commentOut
+      }).then(function(outRes){
+        ttLog.push('OUT['+(i+1)+']: '+JSON.stringify(outRes));
+        if(!outRes || !outRes.id) throw new Error('clockOut entrada '+(i+1)+'\nRespuesta: '+JSON.stringify(outRes));
+        return processEntry(eid, i+1);
+      });
+    });
+  }
+
+  // Obtener el employeeInternalId real via GET /users?search=nombre
+  apiCall('/users', { search: r.employeeName, limit: 10 })
+    .then(function(res){
+      var users = (res && res.users) ? res.users : [];
+      var match = users.find(function(u){ return u.id == r.employeeId; });
+      var eid = (match && match.employeeInternalId) ? match.employeeInternalId : String(r.employeeId);
+      return processEntry(eid, 0);
+    })
+    .then(function(){
+      r.status     = 'approved';
+      r.comment    = document.getElementById('dp-comment').value.trim();
+      r.approvedBy = selectedSupervisor.name;
+      saveSubmissions();
+      saveSubmissionToKV(r);
+      btn.textContent='Aprobar y migrar →'; btn.disabled=false; btnDel.disabled=false;
+      renderDetail(); renderReqList();
+    })
+    .catch(function(err){
+      btn.textContent='Aprobar y migrar →'; btn.disabled=false; btnDel.disabled=false;
+      alert('Error en Time Tracking:\n\n'+err.message+
+        '\n\n'+(ttLog.length ? ttLog.join('\n') : ''));
+    });
+}
+
+// ── BORRAR SOLICITUD ──
+function deleteSubmission(){
+  var r=requests.find(function(x){return x.id===selectedId;});
+  if(!r) return;
+  var msg = r.status==='approved'
+    ? 'Borrar esta solicitud del panel.\n\nNota: los registros en Time Tracking ya fueron creados y no se eliminan.\n\n¿Confirmar?'
+    : 'Borrar esta solicitud del panel. ¿Confirmar?';
+  if(!confirm(msg)) return;
+  // Cerrar panel de inmediato y eliminar localmente
+  requests = requests.filter(function(x){ return x.id !== r.id; });
+  localStorage.setItem(LS_KEY, JSON.stringify(requests));
+  selectedId = null; editingRows = {};
+  document.getElementById('det-panel').style.display = 'none';
+  document.getElementById('det-empty').style.display = 'flex';
+  renderReqList();
+  // Sincronizar con Blob en background
+  fetch('/api/submissions?id='+r.id, {method:'DELETE'}).catch(function(){});
+}
+
+function closeDetail(){
+  selectedId=null; editingRows={};
+  document.getElementById('det-panel').style.display='none';
+  document.getElementById('det-empty').style.display='flex';
+  renderReqList();
+}
+
+// ── INIT ──
+cargarSupervisores();
+recargar();
+</script>
+</body>
+</html>

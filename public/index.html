@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro de Horas — Humand</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --brand:#3B5FBF; --brand-l:#EEF2FF; --brand-d:#1E3A8A; --brand-mid:#6080D8;
+  --bg:#F4F5F8; --card:#FFF; --text:#1A1B2E; --muted:#6B7280;
+  --border:rgba(0,0,0,0.08); --border-med:rgba(0,0,0,0.14);
+  --success:#059669; --s-bg:#ECFDF5; --s-dk:#064E3B;
+  --warn:#D97706; --w-bg:#FFFBEB;
+  --err:#DC2626; --e-bg:#FEF2F2;
+  --r:10px; --rl:14px;
+  --sh:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.04);
+  --sh2:0 4px 16px rgba(0,0,0,.09),0 2px 4px rgba(0,0,0,.04);
+}
+body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); background:var(--bg); min-height:100vh; }
+
+/* TOPBAR */
+.topbar { background:var(--brand-d); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+.logo { display:flex; align-items:center; gap:10px; color:#fff; font-size:15px; font-weight:600; letter-spacing:-.2px; }
+.logo-mark { width:30px; height:30px; background:var(--brand-mid); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; }
+.topbar-r { display:flex; align-items:center; gap:12px; }
+.user-pill { display:flex; align-items:center; gap:8px; color:rgba(255,255,255,.85); font-size:13px; }
+.av { width:32px; height:32px; border-radius:50%; background:var(--brand-mid); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#fff; letter-spacing:.5px; }
+
+/* LAYOUT */
+.main { padding:24px; max-width:1140px; margin:0 auto; }
+.page-hd { margin-bottom:20px; }
+.page-hd h1 { font-size:21px; font-weight:600; letter-spacing:-.3px; margin-bottom:4px; }
+.page-hd p { font-size:13px; color:var(--muted); line-height:1.5; }
+
+/* CARDS */
+.card { background:var(--card); border-radius:var(--rl); border:1px solid var(--border); box-shadow:var(--sh); margin-bottom:14px; overflow:hidden; }
+.card-hd { padding:14px 20px; border-bottom:1px solid var(--border); font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
+.card-hd .sub { font-size:11px; color:var(--muted); font-weight:400; }
+.card-body { padding:18px 20px; }
+
+/* SELECTOR DE USUARIO */
+.user-selector-card { background:linear-gradient(135deg, var(--brand-d) 0%, var(--brand) 100%); border-radius:var(--rl); padding:20px 24px; margin-bottom:16px; color:#fff; }
+.user-selector-card h2 { font-size:15px; font-weight:600; margin-bottom:4px; }
+.user-selector-card p { font-size:12px; opacity:.8; margin-bottom:14px; }
+.user-select-row { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }
+.user-select-row .fg label { color:rgba(255,255,255,.8); }
+.user-select-row select { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:#fff; border-radius:var(--r); padding:9px 12px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; width:100%; }
+.user-select-row select option { background:var(--brand-d); color:#fff; }
+.user-select-row select:focus { border-color:rgba(255,255,255,.6); background:rgba(255,255,255,.18); }
+.btn-cargar { padding:9px 18px; background:#fff; color:var(--brand-d); border:none; border-radius:var(--r); font-size:13px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; transition:.15s; white-space:nowrap; }
+.btn-cargar:hover { background:var(--brand-l); }
+.btn-cargar:disabled { opacity:.5; cursor:not-allowed; }
+.loading-users { font-size:12px; opacity:.7; padding:6px 0; }
+
+/* FORM */
+.form-grid-3 { display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px; margin-bottom:14px; }
+.form-grid-2 { display:grid; grid-template-columns:1fr 2fr; gap:14px; margin-bottom:14px; }
+.fg { display:flex; flex-direction:column; gap:5px; }
+.fg label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.fg select, .fg input[type="text"], .fg input[type="time"] {
+  padding:9px 12px; border:1px solid var(--border-med); border-radius:var(--r);
+  font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text); background:#fff;
+  outline:none; transition:border-color .15s, box-shadow .15s;
+}
+.fg select:focus, .fg input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(59,95,191,.1); }
+
+/* ENTRY ITEM */
+.entry-item { display:grid; grid-template-columns:1fr auto auto auto auto; gap:10px; align-items:center; padding:10px 14px; background:var(--brand-l); border-radius:var(--r); border-left:3px solid var(--brand); margin-bottom:6px; }
+.ep { font-size:12px; font-weight:600; color:var(--brand-d); }
+.em { font-size:11px; color:var(--muted); margin-top:1px; }
+.et { font-size:12px; color:var(--muted); white-space:nowrap; }
+.eh { font-size:13px; font-weight:600; color:var(--brand); font-family:'DM Mono',monospace; min-width:42px; text-align:right; }
+
+/* BADGES */
+.badge { padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+.bp { background:var(--w-bg); color:var(--warn); }
+.ba { background:var(--s-bg); color:var(--success); }
+.br { background:var(--e-bg); color:var(--err); }
+
+/* BUTTONS */
+.btn { padding:9px 18px; border-radius:var(--r); font-size:13px; font-weight:600; cursor:pointer; border:1px solid var(--border-med); font-family:'DM Sans',sans-serif; transition:.15s; color:var(--text); background:#fff; }
+.btn:hover { background:var(--bg); }
+.btn-primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+.btn-primary:hover { background:var(--brand-d); border-color:var(--brand-d); }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.btn-icon { background:none; border:none; cursor:pointer; padding:5px 7px; border-radius:6px; font-size:14px; color:var(--muted); transition:.1s; font-family:'DM Sans',sans-serif; }
+.btn-icon:hover.del { color:var(--err); background:var(--e-bg); }
+
+/* TOTALS */
+.totals-bar { display:flex; gap:20px; padding:12px 20px; background:var(--brand-l); border-top:1px solid var(--border); }
+.ti .tl { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.ti .tv { font-size:18px; font-weight:600; color:var(--brand-d); }
+.action-bar { padding:14px 20px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; background:#fafbff; }
+
+/* ALERTS */
+.alert-warn-inline { font-size:12px; padding:5px 8px; background:var(--w-bg); color:var(--warn); border-radius:6px; border-left:3px solid var(--warn); margin-top:6px; }
+
+/* SUCCESS */
+.success-block { text-align:center; padding:28px 20px; }
+.success-block .check { width:56px; height:56px; border-radius:50%; background:var(--s-bg); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:26px; margin:0 auto 14px; }
+.success-block h3 { font-size:16px; font-weight:600; margin-bottom:6px; }
+.success-block p { font-size:13px; color:var(--muted); line-height:1.6; }
+.ticket-box { background:var(--brand-l); border:1.5px solid var(--brand); border-radius:var(--r); padding:14px 16px; text-align:left; max-width:380px; margin:16px auto 0; }
+.ticket-id { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; margin-bottom:5px; }
+.ticket-title { font-size:13px; font-weight:600; color:var(--brand-d); margin-bottom:10px; }
+.ticket-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px; }
+.tf-label { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.3px; display:block; margin-bottom:2px; }
+
+/* EMPTY */
+.empty { text-align:center; padding:32px 20px; color:var(--muted); font-size:13px; }
+
+/* WEEK NAV */
+.week-nav { display:flex; align-items:center; gap:10px; }
+.week-nav button { background:none; border:1px solid var(--border-med); border-radius:7px; padding:4px 10px; cursor:pointer; color:var(--muted); font-size:12px; font-family:'DM Sans',sans-serif; transition:.1s; }
+.week-nav button:hover { border-color:var(--brand); color:var(--brand); }
+.week-label { font-size:13px; font-weight:600; }
+
+/* SPINNER */
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">H</div>
+    Registro de Horas
+  </div>
+  <div class="topbar-r">
+    <div class="user-pill">
+      <div class="av" id="av">--</div>
+      <span id="av-name">Seleccioná usuario</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-hd">
+    <h1>Carga semanal de horas</h1>
+    <p>Seleccioná tu nombre, completá tus entradas y enviá para revisión del supervisor.</p>
+  </div>
+
+  <!-- Selector de usuario desde Humand -->
+  <div class="user-selector-card">
+    <h2>¿Quién sos?</h2>
+    <p>Seleccioná tu nombre y tu supervisor para continuar.</p>
+    <div class="user-select-row">
+      <div class="fg">
+        <label>Tu supervisor</label>
+        <select id="sel-supervisor-colab" disabled onchange="checkConfirmarBtn()">
+          <option value="">Cargando supervisores...</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Tu nombre</label>
+        <select id="sel-usuario" disabled onchange="checkConfirmarBtn()">
+          <option value="">Seleccioná tu nombre...</option>
+        </select>
+      </div>
+      <button class="btn-cargar" id="btn-seleccionar" onclick="seleccionarUsuario()" disabled>
+        Confirmar
+      </button>
+    </div>
+    <div id="loading-msg" class="loading-users" style="display:none">
+      <span class="spinner"></span> Cargando usuarios...
+    </div>
+  </div>
+
+  <!-- Panel de carga (oculto hasta que seleccione usuario) -->
+  <div id="panel-carga" style="display:none">
+    <div class="card">
+      <div class="card-hd">
+        Nueva entrada
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="periodo-tabs" style="display:flex;background:rgba(59,95,191,.08);border-radius:8px;padding:3px;gap:2px">
+            <button onclick="setPeriodoMode('semana')" id="tab-semana" style="padding:4px 12px;border-radius:6px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;background:var(--brand);color:#fff;transition:.15s">Semana</button>
+            <button onclick="setPeriodoMode('rango')"  id="tab-rango"  style="padding:4px 12px;border-radius:6px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--brand);transition:.15s">Rango libre</button>
+          </div>
+        </div>
+      </div>
+      <!-- Selector semana -->
+      <div id="modo-semana" style="padding:10px 20px 0;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
+        <button onclick="navSemana(-1)" style="background:none;border:1px solid var(--border-med);border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--muted);font-size:12px;font-family:inherit">&#8592;</button>
+        <span id="semana-label" style="font-size:13px;font-weight:600;min-width:160px;text-align:center"></span>
+        <button onclick="navSemana(1)"  style="background:none;border:1px solid var(--border-med);border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--muted);font-size:12px;font-family:inherit">&#8594;</button>
+      </div>
+      <!-- Selector rango libre -->
+      <div id="modo-rango" style="padding:10px 20px 0;display:none;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Desde</label>
+          <input type="date" id="rango-desde" style="padding:6px 10px;border:1px solid var(--border-med);border-radius:8px;font-size:13px;font-family:inherit;outline:none" onchange="onRangoChange()">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Hasta</label>
+          <input type="date" id="rango-hasta" style="padding:6px 10px;border:1px solid var(--border-med);border-radius:8px;font-size:13px;font-family:inherit;outline:none" onchange="onRangoChange()">
+          <span id="rango-label" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="fg">
+            <label>Proyecto *</label>
+            <select id="c-prj">
+              <option value="">Seleccionar proyecto...</option>
+              <option>AFISA</option>
+              <option>Centro de Contacto</option>
+              <option>DINAVI</option>
+              <option>Isla de Flores</option>
+              <option>MEVIR</option>
+              <option>Promociones</option>
+              <option>Recupero BROU</option>
+              <option>UPLA</option>
+              <option>Cobranza Consumo</option>
+              <option>Experiencia al cliente</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Desde *</label>
+            <input type="time" id="c-from" value="09:00">
+          </div>
+          <div class="fg">
+            <label>Hasta *</label>
+            <input type="time" id="c-to" value="17:00">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="fg">
+            <label>Día *</label>
+            <input type="date" id="c-day" style="padding:9px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
+          </div>
+          <div class="fg">
+            <label>Descripción</label>
+            <input type="text" id="c-desc" placeholder="Ej: reunión kick-off, desarrollo UI...">
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end">
+          <button class="btn btn-primary" onclick="addEntry()">+ Agregar entrada</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CARGA MASIVA CSV ── -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd">
+        Cargá desde planilla
+        <span class="sub">CSV compatible con Excel y Google Sheets</span>
+      </div>
+      <div style="padding:14px 20px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+          El archivo debe tener estas columnas en orden:
+          <code>proyecto</code> · <code>dia</code> (YYYY-MM-DD) · <code>desde</code> (HH:MM) · <code>hasta</code> (HH:MM) · <code>descripcion</code> (opcional)
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:var(--brand-l);border:1.5px dashed var(--brand);border-radius:var(--r);cursor:pointer;font-size:13px;color:var(--brand-d);font-weight:600;transition:.15s" onmouseover="this.style.background='#dce7ff'" onmouseout="this.style.background='var(--brand-l)'">
+            📂 Seleccionar archivo .csv
+            <input type="file" accept=".csv,.txt" style="display:none" onchange="handleCSVImport(this)">
+          </label>
+          <button class="btn btn-sm" onclick="descargarPlantillaCSV()">⬇ Descargar plantilla</button>
+        </div>
+        <div id="csv-result" style="display:none;margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">Entradas de la semana</div>
+      <div id="colab-list" style="padding:14px 20px 6px">
+        <div class="empty">Sin entradas todavía.</div>
+      </div>
+      <div class="totals-bar">
+        <div class="ti"><div class="tl">Total horas</div><div class="tv" id="c-tot-h">0 hs</div></div>
+        <div class="ti"><div class="tl">Entradas</div><div class="tv" id="c-tot-e">0</div></div>
+        <div class="ti"><div class="tl">Proyectos</div><div class="tv" id="c-tot-p">0</div></div>
+        <div class="ti"><div class="tl">Estado</div><div class="tv" style="font-size:14px;margin-top:3px"><span class="badge bp">Borrador</span></div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn">Guardar borrador</button>
+        <button class="btn btn-primary" onclick="submitWeek()">Enviar para revisión →</button>
+      </div>
+    </div>
+
+    <!-- Éxito envío -->
+    <div id="c-success" class="card" style="display:none">
+      <div class="success-block">
+        <div class="check">✓</div>
+        <h3>Registro enviado correctamente</h3>
+        <p>Tu supervisor recibirá la solicitud para revisar y aprobar tus horas.<br>
+        El archivo fue guardado en Humand Files como pendiente de revisión.</p>
+        <div class="ticket-box">
+          <div class="ticket-id" id="t-id">ARCHIVO #HRS-2025-W15</div>
+          <div class="ticket-title" id="t-title">Horas 7–13 Abr</div>
+          <div class="ticket-fields">
+            <div><span class="tf-label">Total</span><strong id="t-total">— hs</strong></div>
+            <div><span class="tf-label">Estado</span><span class="badge bp">Pendiente</span></div>
+            <div><span class="tf-label">Enviado</span><span id="t-date">—</span></div>
+            <div><span class="tf-label">Entradas</span><span id="t-entries">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Historial de envíos del colaborador -->
+    <div id="mis-envios" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+// ── CONSTANTES ──
+var PROXY     = '/api/humand';
+var FOLDER_ID = 1359526;
+var PROJECTS  = ['AFISA','Centro de Contacto','DINAVI','Isla de Flores','MEVIR','Promociones','Recupero BROU','UPLA','Cobranza Consumo','Experiencia al cliente'];
+var LS_KEY    = 'humand-horas-v5';
+
+// ── ESTADO ──
+var currentUser       = null;
+var currentSupervisor = null;
+var colabEntries      = [];
+var colabNextId       = 1;
+
+// Bloquear días futuros en el input de fecha al cargar la página
+(function(){
+  var inp = document.getElementById('c-day');
+  if(inp){ var d=new Date(); inp.max=d.getFullYear()+'-'+(String(d.getMonth()+1).padStart(2,'0'))+'-'+(String(d.getDate()).padStart(2,'0')); }
+})();
+
+// ── UTILS ──
+function calcH(f,t){
+  var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1];
+  return Math.max(0,Math.round(((th*60+tm-fh*60-fm)/60)*10)/10);
+}
+function totalH(entries){ return Math.round(entries.reduce(function(s,e){return s+calcH(e.from,e.to);},0)*10)/10; }
+function uniqueP(entries){ return new Set(entries.map(function(e){return e.project;})).size; }
+function statusLabel(s){ return {pending:'Pendiente',approved:'Aprobado',returned:'Devuelto'}[s]||s; }
+function statusClass(s){ return {pending:'bp',approved:'ba',returned:'br'}[s]||'bp'; }
+function initials(fn,ln){ return ((fn||'').charAt(0)+(ln||'').charAt(0)).toUpperCase(); }
+function nowStr(){ return new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+// ── PROXY CALL ──
+function apiCall(path, params, method, body){
+  method = method || 'GET';
+  var qs  = params ? '&' + new URLSearchParams(params).toString() : '';
+  var url = PROXY + '?path=' + encodeURIComponent(path) + qs;
+  var opts = { method: method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(url, opts).then(function(r){ return r.json(); });
+}
+
+// ── CARGAR USUARIOS Y SUPERVISORES ──
+var SEGMENTATION_ITEM_ID = 1499762;
+
+function checkConfirmarBtn(){
+  var selUser = document.getElementById('sel-usuario');
+  var selSup  = document.getElementById('sel-supervisor-colab');
+  document.getElementById('btn-seleccionar').disabled = !selUser.value || !selSup.value;
+}
+
+function cargarSegmentos(){
+  var selUser = document.getElementById('sel-usuario');
+  document.getElementById('loading-msg').style.display = 'block';
+  selUser.innerHTML = '<option value="">Cargando usuarios...</option>';
+  apiCall('/segmentations/users', { segmentationItemIds: SEGMENTATION_ITEM_ID, limit: 100 })
+    .then(function(data){
+      document.getElementById('loading-msg').style.display = 'none';
+      var items = data.items || data || [];
+      if (!items.length) {
+        selUser.innerHTML = '<option value="">Sin usuarios configurados</option>';
+        return;
+      }
+      selUser.innerHTML = '<option value="">Seleccioná tu nombre...</option>' +
+        items.map(function(u){
+          return '<option value="' + u.id + '" data-eid="' + (u.employeeInternalId||'') + '" data-fn="' + u.firstName + '" data-ln="' + u.lastName + '">' +
+            u.firstName + ' ' + u.lastName + '</option>';
+        }).join('');
+      selUser.disabled = false;
+    })
+    .catch(function(){
+      document.getElementById('loading-msg').style.display = 'none';
+      selUser.innerHTML = '<option value="">Error cargando usuarios</option>';
+    });
+}
+
+function cargarSupervisoresColab(){
+  var sel = document.getElementById('sel-supervisor-colab');
+  apiCall('/segmentations', null, 'GET')
+    .then(function(data){
+      var items = data.items || data || [];
+      var seg = items.find(function(s){
+        return s.name && s.name.toLowerCase().includes('supervisores');
+      });
+      if (!seg) throw new Error('Segmentación Supervisores no encontrada');
+      var segItems = seg.segmentationItems || seg.items || [];
+      if (!segItems.length) throw new Error('Sin items en segmentación');
+      var ids = segItems.map(function(i){ return i.id; }).join(',');
+      return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 100 }, 'GET');
+    })
+    .then(function(data){
+      var users = data.items || data || [];
+      if (!users.length) throw new Error('Sin usuarios supervisores');
+      sel.innerHTML = '<option value="">Seleccioná tu supervisor...</option>' +
+        users.map(function(u){
+          return '<option value="' + u.id + '" data-name="' + u.firstName + ' ' + u.lastName + '">' +
+            u.firstName + ' ' + u.lastName + '</option>';
+        }).join('');
+      sel.disabled = false;
+    })
+    .catch(function(err){
+      console.warn('[sup-colab]', err.message);
+      sel.innerHTML = '<option value="">— Error al cargar supervisores —</option>';
+      sel.disabled = false;
+    });
+}
+
+function seleccionarUsuario(){
+  var selUser = document.getElementById('sel-usuario');
+  var selSup  = document.getElementById('sel-supervisor-colab');
+  var opt     = selUser.options[selUser.selectedIndex];
+  var optSup  = selSup.options[selSup.selectedIndex];
+  if (!opt || !opt.value || !optSup || !optSup.value) return;
+  currentUser = {
+    id: parseInt(opt.value),
+    employeeInternalId: opt.getAttribute('data-eid'),
+    firstName: opt.getAttribute('data-fn'),
+    lastName:  opt.getAttribute('data-ln'),
+  };
+  currentSupervisor = {
+    id:   optSup.value,
+    name: optSup.getAttribute('data-name'),
+  };
+  var nombre = currentUser.firstName + ' ' + currentUser.lastName;
+  document.getElementById('av').textContent      = initials(currentUser.firstName, currentUser.lastName);
+  document.getElementById('av-name').textContent = nombre;
+  document.getElementById('panel-carga').style.display = 'block';
+  document.getElementById('panel-carga').scrollIntoView({behavior:'smooth', block:'start'});
+  renderMisEnvios();
+}
+
+// ── MIS ENVÍOS (historial del colaborador) ──
+function renderMisEnvios(){
+  if(!currentUser) return;
+  var div = document.getElementById('mis-envios');
+  function _render(all){
+    var mine = all.filter(function(s){ return s.employeeId === currentUser.id; });
+    if(!mine.length){ div.style.display='none'; return; }
+    div.style.display='block';
+    div.innerHTML='<div class="card"><div class="card-hd">Mis envíos anteriores <span class="sub">'+mine.length+' registros</span></div>' +
+      mine.map(function(s){
+        var ret = s.status==='returned'&&s.comment
+          ? '<div class="alert-warn-inline">↩ Comentario del supervisor: '+s.comment+'</div>' : '';
+        return '<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">' +
+          '<div style="flex:1">' +
+            '<div style="font-weight:600;font-size:13px">'+s.periodo+'</div>' +
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+s.totalHoras+' hs · '+
+              new Date(s.submittedAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div>'+
+            ret+
+          '</div>' +
+          '<span class="badge '+statusClass(s.status)+'">'+statusLabel(s.status)+'</span>'+
+        '</div>';
+      }).join('')+
+      '</div>';
+  }
+  // Carga desde KV (compartido entre dispositivos), fallback a localStorage
+  fetch('/api/submissions')
+    .then(function(r){ return r.json(); })
+    .then(_render)
+    .catch(function(){ _render(JSON.parse(localStorage.getItem(LS_KEY)||'[]')); });
+}
+
+// ── COLABORADOR — ENTRADAS ──
+function todayStr(){
+  var d = new Date();
+  return d.getFullYear()+'-'+(String(d.getMonth()+1).padStart(2,'0'))+'-'+(String(d.getDate()).padStart(2,'0'));
+}
+function nowTimeStr(){
+  var d = new Date();
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+
+function addEntry(){
+  var p = document.getElementById('c-prj').value;
+  var f = document.getElementById('c-from').value;
+  var t = document.getElementById('c-to').value;
+  var d = document.getElementById('c-day').value;
+  var desc = document.getElementById('c-desc').value;
+  if (!p) { alert('Seleccioná un proyecto'); return; }
+  if (!d) { alert('Seleccioná un día'); return; }
+  if (d > todayStr()) { alert('No podés cargar horas para días futuros.\nSolo se permiten días de hoy o anteriores.'); return; }
+  if (d === todayStr() && t > nowTimeStr()) {
+    alert('La hora de salida (' + t + ') aún no pasó.\nSolo podés registrar horas que ya ocurrieron.');
+    return;
+  }
+  if (calcH(f,t) <= 0) { alert('El horario de fin debe ser posterior al inicio'); return; }
+  colabEntries.push({id:colabNextId++, project:p, day:d, from:f, to:t, desc:desc});
+  document.getElementById('c-prj').value  = '';
+  document.getElementById('c-desc').value = '';
+  renderColabList();
+}
+
+function removeEntry(id){
+  colabEntries = colabEntries.filter(function(e){return e.id!==id;});
+  renderColabList();
+}
+
+function renderColabList(){
+  var c = document.getElementById('colab-list');
+  if (!colabEntries.length) {
+    c.innerHTML = '<div class="empty">Sin entradas todavía. Agregá tu primera entrada arriba.</div>';
+  } else {
+    c.innerHTML = colabEntries.map(function(e){
+      return '<div class="entry-item">' +
+        '<div><div class="ep">' + e.project + '</div><div class="em">' + e.day + (e.desc?' · '+e.desc:'') + '</div></div>' +
+        '<div class="et">' + e.from + ' → ' + e.to + '</div>' +
+        '<div class="eh">' + calcH(e.from,e.to) + ' hs</div>' +
+        '<span class="badge bp">Borrador</span>' +
+        '<button class="btn-icon del" onclick="removeEntry(' + e.id + ')">✕</button>' +
+        '</div>';
+    }).join('');
+  }
+  document.getElementById('c-tot-h').textContent = totalH(colabEntries) + ' hs';
+  document.getElementById('c-tot-e').textContent = colabEntries.length;
+  document.getElementById('c-tot-p').textContent = uniqueP(colabEntries);
+}
+
+function submitWeek(){
+  if (!currentUser) { alert('Seleccioná tu usuario primero'); return; }
+  if (!currentSupervisor) { alert('Seleccioná tu supervisor primero'); return; }
+  if (!colabEntries.length) { alert('Agregá al menos una entrada'); return; }
+
+  var tot    = totalH(colabEntries);
+  var nombre = currentUser.firstName + ' ' + currentUser.lastName;
+  var periodo = getPeriodoLabel();
+  var submission = {
+    employeeId:          currentUser.id,
+    employeeInternalId:  currentUser.employeeInternalId,
+    employeeName:        nombre,
+    supervisorId:        currentSupervisor.id,
+    supervisorName:      currentSupervisor.name,
+    periodo:             periodo,
+    periodoDesde:        getPeriodoDesde(),
+    periodoHasta:        getPeriodoHasta(),
+    totalHoras:          tot,
+    submittedAt:         new Date().toISOString(),
+    entries: colabEntries.map(function(e,i){ return Object.assign({},e,{id:i+1}); })
+  };
+
+  var fileName = 'horas-' + submission.periodoDesde + '-' + submission.periodoHasta + '-' + currentUser.id + '.pdf';
+
+  var btnEnviar = document.querySelector('[onclick="submitWeek()"]');
+  if (btnEnviar) { btnEnviar.innerHTML='<span class="spinner"></span>Enviando...'; btnEnviar.disabled = true; }
+
+  guardarEnFiles(submission, fileName)
+    .then(function(fileId){
+      // Guardar en localStorage para que el supervisor lo vea en /admin
+      var sub = {
+        id:          Date.now(),
+        fileId:      fileId,
+        employeeId:  currentUser.id,
+        employeeInternalId: currentUser.employeeInternalId || null,
+        employeeName: nombre,
+        supervisorId:   currentSupervisor.id,
+        supervisorName: currentSupervisor.name,
+        periodo:     periodo,
+        periodoDesde: submission.periodoDesde,
+        periodoHasta: submission.periodoHasta,
+        totalHoras:  tot,
+        submittedAt: submission.submittedAt,
+        status:      'pending',
+        comment:     '',
+        modified:    false,
+        entries:     submission.entries
+      };
+      var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+      prev.unshift(sub);
+      localStorage.setItem(LS_KEY, JSON.stringify(prev));
+
+      // Guardar en KV para compartir entre dispositivos
+      fetch('/api/submissions', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(sub)
+      }).catch(function(){/* fallback: ya está en localStorage */});
+
+      // Actualizar UI
+      document.getElementById('t-title').textContent   = periodo + ' · ' + nombre;
+      document.getElementById('t-total').textContent   = tot + ' hs';
+      document.getElementById('t-date').textContent    = nowStr();
+      document.getElementById('t-entries').textContent = colabEntries.length + ' entradas';
+      document.getElementById('t-id').textContent      = 'FILE ID: ' + fileId;
+
+      colabEntries = [];
+      renderColabList();
+      renderMisEnvios();
+      document.getElementById('c-success').style.display = 'block';
+      document.getElementById('c-success').scrollIntoView({behavior:'smooth'});
+      if (btnEnviar) { btnEnviar.textContent = 'Enviar para revisión →'; btnEnviar.disabled = false; }
+    })
+    .catch(function(err){
+      alert('Error al guardar en Humand Files: ' + err.message);
+      if (btnEnviar) { btnEnviar.textContent = 'Enviar para revisión →'; btnEnviar.disabled = false; }
+    });
+}
+
+// ── GENERAR PDF REAL ──
+function generatePDFBlob(submission){
+  var jsPDF = window.jspdf.jsPDF;
+  var doc   = new jsPDF({ unit:'mm', format:'a4' });
+  var W = 210;
+  var blue = [30,58,138], gray = [107,114,128], dark = [26,27,46], lblue = [238,242,255];
+
+  // Encabezado azul
+  doc.setFillColor(blue[0],blue[1],blue[2]);
+  doc.rect(0,0,W,24,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(15);
+  doc.text('Humand',14,11);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.text('Registro de Horas',14,19);
+
+  // Info colaborador
+  doc.setTextColor(dark[0],dark[1],dark[2]);
+  doc.setFont('helvetica','bold'); doc.setFontSize(13);
+  doc.text(submission.employeeName,14,33);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setTextColor(gray[0],gray[1],gray[2]);
+  doc.text('Periodo: '+submission.periodo,14,40);
+  var sent = new Date(submission.submittedAt).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  doc.text('Enviado: '+sent,14,46);
+
+  // Badge estado
+  doc.setFillColor(255,251,235);
+  doc.roundedRect(142,29,54,14,3,3,'F');
+  doc.setDrawColor(217,119,6);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(142,29,54,14,3,3,'D');
+  doc.setTextColor(217,119,6);
+  doc.setFont('helvetica','bold'); doc.setFontSize(7.5);
+  doc.text('PENDIENTE DE APROBACION',169,37,{align:'center'});
+
+  // Tabla de entradas
+  var rows = submission.entries.map(function(e){
+    var h = calcH(e.from,e.to);
+    var dayLabel = e.day;
+    try { dayLabel = new Date(e.day+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'}); } catch(er){}
+    return [e.project, dayLabel, e.from, e.to, h+' hs'];
+  });
+
+  doc.autoTable({
+    startY: 54,
+    head: [['Proyecto','Dia','Desde','Hasta','Horas']],
+    body: rows,
+    theme: 'grid',
+    headStyles:{ fillColor:blue, textColor:[255,255,255], fontStyle:'bold', fontSize:8, cellPadding:3 },
+    bodyStyles:{ fontSize:8, textColor:dark, cellPadding:3 },
+    alternateRowStyles:{ fillColor:lblue },
+    columnStyles:{
+      0:{ cellWidth:75 },
+      1:{ cellWidth:38 },
+      2:{ cellWidth:22, halign:'center' },
+      3:{ cellWidth:22, halign:'center' },
+      4:{ cellWidth:21, halign:'right', fontStyle:'bold' }
+    },
+    margin:{ left:14, right:14 }
+  });
+
+  // Fila de totales
+  var fy = doc.lastAutoTable.finalY;
+  doc.setFillColor(lblue[0],lblue[1],lblue[2]);
+  doc.rect(14,fy,182,10,'F');
+  doc.setTextColor(dark[0],dark[1],dark[2]);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('Total horas: '+submission.totalHoras+' hs', 17, fy+7);
+  doc.text('Entradas: '+submission.entries.length, 194, fy+7, {align:'right'});
+
+  // Pie de página
+  doc.setFont('helvetica','normal'); doc.setFontSize(7);
+  doc.setTextColor(gray[0],gray[1],gray[2]);
+  doc.text('Generado por sistema de Registro de Horas — Humand', 14, 287);
+
+  return doc.output('blob');
+}
+
+// ── GUARDAR EN HUMAND FILES ──
+function guardarEnFiles(submission, fileName){
+  var pdfBlob = generatePDFBlob(submission);
+
+  // Paso 1: obtener signed URL para subir a S3
+  var signedParams = new URLSearchParams({
+    path: '/signed-url',
+    type: 'FILE',
+    fileName: fileName,
+    contentType: 'application/pdf',
+    public: 'false'
+  });
+
+  return fetch(PROXY + '?' + signedParams.toString(), { method: 'POST' })
+    .then(function(r){ return r.json(); })
+    .then(function(signed){
+      if (!signed.bucketUrl) throw new Error('Sin signed URL: ' + JSON.stringify(signed));
+
+      // Paso 2: subir PDF a S3
+      var s3Form = new FormData();
+      s3Form.append('key',              signed.key);
+      s3Form.append('Content-Type',     'application/pdf');
+      s3Form.append('policy',           signed.policy);
+      s3Form.append('X-Amz-Algorithm',  signed['x-amz-algorithm']);
+      s3Form.append('X-Amz-Credential', signed['x-amz-credential']);
+      s3Form.append('X-Amz-Date',       signed['x-amz-date']);
+      s3Form.append('X-Amz-Signature',  signed['x-amz-signature']);
+      s3Form.append('file', pdfBlob, fileName);
+
+      return fetch(signed.bucketUrl, { method: 'POST', body: s3Form })
+        .then(function(r){
+          if (r.status === 204 || r.ok) return signed.key;
+          return r.text().then(function(t){ throw new Error('Error S3 ' + r.status + ': ' + t); });
+        });
+    })
+    .then(function(s3Key){
+      // Paso 3: registrar en Humand Files con multipart/form-data
+      var fileParams = new URLSearchParams({ path: '/files' });
+      var filesForm  = new FormData();
+      filesForm.append('file', pdfBlob, fileName);
+      filesForm.append('folderId', String(FOLDER_ID));
+      filesForm.append('name', fileName);
+      filesForm.append('sendNotification', 'false');
+      return fetch(PROXY + '?' + fileParams.toString(), {
+        method: 'POST',
+        body:   filesForm
+      });
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.id) throw new Error(data.message || 'Sin ID en respuesta de Files');
+      return data.id;
+    });
+}
+
+// ── CARGA MASIVA CSV ──
+function parseCSVLine(line, sep) {
+  var result = [], current = '', inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === sep && !inQuotes) {
+      result.push(current.trim()); current = '';
+    } else {
+      current += c;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function handleCSVImport(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result.replace(/^﻿/, ''); // strip BOM de Excel
+    var lines = text.split(/\r?\n/).filter(function(l) { return l.trim(); });
+    if (lines.length < 2) {
+      showCSVResult([], [{ row: '-', msg: 'El archivo no tiene datos o solo tiene encabezado.' }]);
+      input.value = '';
+      return;
+    }
+    // Auto-detectar separador: Excel en español usa ; mientras que Google Sheets usa ,
+    var sep = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
+    var today = todayStr();
+    var errors = [];
+    var valid = [];
+    lines.slice(1).forEach(function(line, i) {
+      var rowNum = i + 2;
+      var vals = parseCSVLine(line, sep);
+      var proyecto = (vals[0] || '').trim();
+      var dia      = (vals[1] || '').trim();
+      var desde    = (vals[2] || '').trim();
+      var hasta    = (vals[3] || '').trim();
+      var desc     = (vals[4] || '').trim();
+      if (!proyecto && !dia && !desde && !hasta) return; // fila vacía
+      if (!PROJECTS.includes(proyecto)) {
+        errors.push({ row: rowNum, msg: 'Proyecto "' + proyecto + '" no válido.' });
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+        errors.push({ row: rowNum, msg: 'Fecha "' + dia + '" debe ser YYYY-MM-DD (ej: 2026-04-28).' });
+        return;
+      }
+      if (dia > today) {
+        errors.push({ row: rowNum, msg: 'Fecha ' + dia + ' es futura. Solo se permiten fechas hasta hoy.' });
+        return;
+      }
+      if (!/^\d{1,2}:\d{2}$/.test(desde) || !/^\d{1,2}:\d{2}$/.test(hasta)) {
+        errors.push({ row: rowNum, msg: 'Horarios deben ser HH:MM (ej: 09:00).' });
+        return;
+      }
+      // Normalizar a dos dígitos
+      var desdePad = desde.padStart(5, '0');
+      var hastaPad = hasta.padStart(5, '0');
+      if (calcH(desdePad, hastaPad) <= 0) {
+        errors.push({ row: rowNum, msg: 'Hora de salida (' + hasta + ') debe ser posterior al ingreso (' + desde + ').' });
+        return;
+      }
+      valid.push({ id: colabNextId++, project: proyecto, day: dia, from: desdePad, to: hastaPad, desc: desc });
+    });
+    if (valid.length) {
+      valid.forEach(function(e) { colabEntries.push(e); });
+      renderColabList();
+      document.getElementById('colab-list').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    showCSVResult(valid, errors);
+    input.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function showCSVResult(valid, errors) {
+  var div = document.getElementById('csv-result');
+  var html = '';
+  if (valid.length) {
+    html += '<div style="padding:8px 12px;background:var(--s-bg);border-left:3px solid var(--success);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--s-dk);margin-bottom:6px">' +
+      '✓ ' + valid.length + ' entrada' + (valid.length > 1 ? 's' : '') + ' importada' + (valid.length > 1 ? 's' : '') + ' correctamente.</div>';
+  }
+  if (errors.length) {
+    html += '<div style="padding:8px 12px;background:var(--e-bg);border-left:3px solid var(--err);border-radius:0 var(--r) var(--r) 0;font-size:12px;color:var(--err)">' +
+      errors.length + ' fila' + (errors.length > 1 ? 's' : '') + ' con error:' +
+      '<ul style="margin:4px 0 0 16px">' +
+      errors.map(function(e) { return '<li>Fila ' + e.row + ': ' + e.msg + '</li>'; }).join('') +
+      '</ul></div>';
+  }
+  div.innerHTML = html;
+  div.style.display = html ? 'block' : 'none';
+}
+
+function descargarPlantillaCSV() {
+  var today = todayStr();
+  var header = 'proyecto,dia,desde,hasta,descripcion';
+  var rows = [
+    'AFISA,' + today + ',09:00,17:00,Ejemplo de descripción',
+    'MEVIR,' + today + ',14:00,18:00,Reunión de equipo',
+  ];
+  var csv = [header].concat(rows).join('\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM para que Excel lo abra bien
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'plantilla-horas.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── PERÍODO ──
+var periodoMode  = 'semana';
+var semanaOffset = 0;
+
+function getLunes(offset){
+  var d = new Date();
+  var day = d.getDay();
+  var diff = (day === 0) ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff + (offset * 7));
+  d.setHours(0,0,0,0);
+  return d;
+}
+function fmtDate(d){ return d.toISOString().split('T')[0]; }
+function fmtLabel(d){ return d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}); }
+
+function updateSemanaLabel(){
+  var lunes   = getLunes(semanaOffset);
+  var viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
+  document.getElementById('semana-label').textContent = fmtLabel(lunes) + ' – ' + fmtLabel(viernes) + ' ' + lunes.getFullYear();
+  var cday = document.getElementById('c-day');
+  if (cday) { cday.min=fmtDate(lunes); cday.max=fmtDate(viernes); if(!cday.value) cday.value=fmtDate(lunes); }
+}
+
+function navSemana(dir){ semanaOffset += dir; updateSemanaLabel(); }
+
+function setPeriodoMode(mode){
+  periodoMode = mode;
+  document.getElementById('modo-semana').style.display = mode==='semana' ? 'flex' : 'none';
+  document.getElementById('modo-rango').style.display  = mode==='rango'  ? 'flex' : 'none';
+  document.getElementById('tab-semana').style.background = mode==='semana' ? 'var(--brand)' : 'transparent';
+  document.getElementById('tab-semana').style.color = mode==='semana' ? '#fff' : 'var(--brand)';
+  document.getElementById('tab-rango').style.background  = mode==='rango'  ? 'var(--brand)' : 'transparent';
+  document.getElementById('tab-rango').style.color  = mode==='rango'  ? '#fff' : 'var(--brand)';
+  var cday = document.getElementById('c-day');
+  if (mode === 'semana') {
+    var lunes   = getLunes(semanaOffset);
+    var viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
+    if (cday) { cday.min=fmtDate(lunes); cday.max=fmtDate(viernes); cday.value=fmtDate(lunes); }
+  } else {
+    if (cday) { cday.min=''; cday.max=''; }
+    onRangoChange();
+  }
+}
+
+function onRangoChange(){
+  var desde = document.getElementById('rango-desde').value;
+  var hasta = document.getElementById('rango-hasta').value;
+  var cday  = document.getElementById('c-day');
+  var label = document.getElementById('rango-label');
+  if (desde && hasta) {
+    if (cday) { cday.min=desde; cday.max=hasta; cday.value=desde; }
+    var days = Math.round((new Date(hasta)-new Date(desde))/(1000*60*60*24))+1;
+    if (label) label.textContent = days + ' día' + (days===1?'':'s');
+  } else {
+    if (label) label.textContent = '';
+  }
+}
+
+function getPeriodoLabel(){
+  if (periodoMode==='semana') return document.getElementById('semana-label').textContent;
+  var desde=document.getElementById('rango-desde').value, hasta=document.getElementById('rango-hasta').value;
+  if (desde&&hasta) return fmtLabel(new Date(desde))+' – '+fmtLabel(new Date(hasta));
+  return 'Período personalizado';
+}
+function getPeriodoDesde(){
+  if (periodoMode==='semana') return fmtDate(getLunes(semanaOffset));
+  return document.getElementById('rango-desde').value || fmtDate(new Date());
+}
+function getPeriodoHasta(){
+  if (periodoMode==='semana') { var v=new Date(getLunes(semanaOffset)); v.setDate(v.getDate()+4); return fmtDate(v); }
+  return document.getElementById('rango-hasta').value || fmtDate(new Date());
+}
+
+// ── INIT ──
+cargarSegmentos();
+cargarSupervisoresColab();
+updateSemanaLabel();
+var _hoy = new Date();
+document.getElementById('rango-desde').value = fmtDate(_hoy);
+document.getElementById('rango-hasta').value = fmtDate(_hoy);
+</script>
+</body>
+</html>
