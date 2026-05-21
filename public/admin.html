@@ -205,6 +205,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
         </div>
         <div class="action-bar">
           <button class="btn btn-delete btn-sm" id="btn-del" onclick="archiveSubmission()">Archivar solicitud</button>
+          <button class="btn btn-sm" id="btn-del-perm" onclick="deleteSubmission()" style="display:none;background:#dc2626;color:#fff;border-color:#dc2626">🗑 Borrar definitivamente</button>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm" onclick="closeDetail()">Cerrar</button>
             <button class="btn btn-approve btn-sm" id="btn-appr" onclick="approveReq()">Aprobar y migrar a Time Tracking →</button>
@@ -424,6 +425,7 @@ function renderReqList(){
           (!r.archived
             ? '<button class="btn-icon del" title="Archivar solicitud" onclick="event.stopPropagation();archiveFromList('+r.id+')">✕</button>'
             : '<button class="btn-icon" title="Desarchivar" onclick="event.stopPropagation();unarchiveFromList('+r.id+')" style="font-size:10px;padding:3px 6px;border:1px solid var(--border-med);border-radius:5px">↩</button>') +
+          '<button class="btn-icon del" title="Borrar definitivamente" onclick="event.stopPropagation();deleteFromList('+r.id+')" style="font-size:12px;opacity:0.6">🗑</button>' +
         '</div>' +
       '</div></div>';
   }).join('');
@@ -448,6 +450,8 @@ function renderDetail(){
   document.getElementById('dp-dirty').style.display = 'none';
   var btnDel = document.getElementById('btn-del');
   if(btnDel) btnDel.textContent = r.archived ? 'Desarchivar' : 'Archivar solicitud';
+  var btnDelPerm = document.getElementById('btn-del-perm');
+  if(btnDelPerm) btnDelPerm.style.display = r.archived ? '' : 'none';
 
   var hint = document.getElementById('dp-hint');
   if(ro){
@@ -714,6 +718,40 @@ function toggleArchived(){
   showArchived = !showArchived;
   updateArchivedBtn();
   renderReqList();
+}
+
+function deleteFromList(id){
+  var r = requests.find(function(x){ return x.id===id; });
+  if(!r) return;
+  if(!confirm('¿Borrar DEFINITIVAMENTE la solicitud de '+r.employeeName+' ('+r.periodo+')?\n\nEsta acción no se puede deshacer.')) return;
+  fetch('/api/submissions?id='+id, { method:'DELETE' })
+  .then(function(res){
+    if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error al borrar'); });
+    requests = requests.filter(function(x){ return x.id!==id; });
+    saveSubmissions();
+    if(selectedId===id){ selectedId=null; editingRows={}; document.getElementById('det-panel').style.display='none'; document.getElementById('det-empty').style.display='flex'; }
+    renderReqList();
+    updateArchivedBtn();
+  })
+  .catch(function(err){ alert(err.message||'Error al borrar la solicitud'); });
+}
+
+function deleteSubmission(){
+  var r = requests.find(function(x){ return x.id===selectedId; });
+  if(!r) return;
+  if(!confirm('¿Borrar DEFINITIVAMENTE la solicitud de '+r.employeeName+' ('+r.periodo+')?\n\nEsta acción no se puede deshacer.')) return;
+  fetch('/api/submissions?id='+r.id, { method:'DELETE' })
+  .then(function(res){
+    if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error al borrar'); });
+    requests = requests.filter(function(x){ return x.id!==r.id; });
+    saveSubmissions();
+    selectedId=null; editingRows={};
+    document.getElementById('det-panel').style.display='none';
+    document.getElementById('det-empty').style.display='flex';
+    renderReqList();
+    updateArchivedBtn();
+  })
+  .catch(function(err){ alert(err.message||'Error al borrar la solicitud'); });
 }
 
 function updateArchivedBtn(){
