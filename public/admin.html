@@ -175,6 +175,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           </div>
           <span class="badge" id="dp-badge">—</span>
         </div>
+        <div id="dp-orig-sup" style="display:none;margin-top:10px;padding:8px 12px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:500"></div>
         <div class="alert alert-info" id="dp-hint" style="margin-top:14px">
           Hacé click en ✎ para editar cualquier fila. Confirmá con ✓ antes de aprobar.
         </div>
@@ -416,7 +417,7 @@ function renderReqList(){
     var dateLabel = r.submittedAt ? '<span style="font-size:10px;color:var(--muted)"> · '+fmtDate(r.submittedAt)+'</span>' : '';
     return '<div class="req-row'+(sel?' selected':'')+'" onclick="selectReq('+r.id+')">' +
       '<div class="req-name">'+r.employeeName+(r.modified?'<span class="mod-dot"></span>':'')+'</div>' +
-      '<div class="req-meta">'+r.periodo+dateLabel+'</div>' +
+      '<div class="req-meta">'+r.periodo+dateLabel+(r.originalSupervisorName?'<span style="display:inline-block;margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px">sup. original: '+r.originalSupervisorName+'</span>':'')+'</div>' +
       '<div class="req-footer">' +
         '<span style="font-size:12px;font-weight:600;color:var(--brand-d)">'+totalH(r.entries)+' hs</span>' +
         '<div style="display:flex;align-items:center;gap:6px">' +
@@ -447,6 +448,11 @@ function renderDetail(){
   document.getElementById('dp-badge').textContent = statusLabel(r.status);
   document.getElementById('btn-appr').style.display = ro?'none':'';
   document.getElementById('dp-dirty').style.display = 'none';
+  var origDiv = document.getElementById('dp-orig-sup');
+  if(origDiv){
+    origDiv.style.display = r.originalSupervisorName ? '' : 'none';
+    origDiv.textContent = r.originalSupervisorName ? '⚠ Supervisor original ' + r.originalSupervisorName + ' estaba de licencia al momento del envío.' : '';
+  }
   var btnDel = document.getElementById('btn-del');
   if(btnDel) btnDel.textContent = r.archived ? 'Desarchivar' : 'Archivar solicitud';
   var btnDelPerm = document.getElementById('btn-del-perm');

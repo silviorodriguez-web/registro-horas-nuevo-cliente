@@ -390,12 +390,12 @@ function checkSupervisorDisponible(){
         var backup = SUPERVISOR_BACKUPS[supervisorId];
         if(backup){
           _effectiveSupervisor = backup;
-          msgDiv.textContent = '⚠️ Tu supervisor está ausente hoy. Tu solicitud será enviada a ' + backup.name + ' para su aprobación.';
+          // guardamos nombre del supervisor original para mostrarlo al backup en el admin
+          _effectiveSupervisor._originalSupervisorName = selSup.options[selSup.selectedIndex] ? selSup.options[selSup.selectedIndex].getAttribute('data-name') : null;
         } else {
           _effectiveSupervisor = null;
-          msgDiv.textContent = '⚠️ Tu supervisor está ausente hoy. Contactá a RRHH para coordinar la aprobación.';
         }
-        msgDiv.style.display = 'block';
+        msgDiv.style.display = 'none'; // redirección silenciosa para el colaborador
       } else {
         _effectiveSupervisor = null;
         msgDiv.style.display = 'none';
@@ -449,12 +449,12 @@ function filtrarUsuarios(q){
         return name.includes(norm);
       });
   if(!filtered.length){
-    dd.innerHTML='<div style="padding:10px 12px;color:#888;font-size:13px">Sin resultados</div>';
+    dd.innerHTML='<div style="padding:10px 12px;color:#6b7280;font-size:13px;background:#fff">Sin resultados</div>';
     dd.style.display='block'; return;
   }
   dd.innerHTML = filtered.slice(0,60).map(function(u,i){
     var fn = u.firstName+' '+u.lastName;
-    return '<div class="u-opt" data-uid="'+u.id+'" style="padding:9px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f3f4f6" '+
+    return '<div class="u-opt" data-uid="'+u.id+'" style="padding:9px 12px;cursor:pointer;font-size:14px;color:#111827;border-bottom:1px solid #f3f4f6" '+
       'onmousedown="seleccionarDesdeDropdown('+u.id+')" '+
       'onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'\'">'+fn+'</div>';
   }).join('');
@@ -557,8 +557,8 @@ function seleccionarUsuario(){
     lastName:  opt.getAttribute('data-ln'),
   };
   currentSupervisor = _effectiveSupervisor
-    ? { id: String(_effectiveSupervisor.id), name: _effectiveSupervisor.name }
-    : { id: optSup.value, name: optSup.getAttribute('data-name') };
+    ? { id: String(_effectiveSupervisor.id), name: _effectiveSupervisor.name, originalSupervisorName: _effectiveSupervisor._originalSupervisorName || null }
+    : { id: optSup.value, name: optSup.getAttribute('data-name'), originalSupervisorName: null };
   var nombre = currentUser.firstName + ' ' + currentUser.lastName;
   document.getElementById('av').textContent      = initials(currentUser.firstName, currentUser.lastName);
   document.getElementById('av-name').textContent = nombre;
@@ -678,6 +678,7 @@ function submitWeek(){
     employeeName:        nombre,
     supervisorId:        currentSupervisor.id,
     supervisorName:      currentSupervisor.name,
+    originalSupervisorName: currentSupervisor.originalSupervisorName || null,
     periodo:             periodo,
     periodoDesde:        getPeriodoDesde(),
     periodoHasta:        getPeriodoHasta(),
