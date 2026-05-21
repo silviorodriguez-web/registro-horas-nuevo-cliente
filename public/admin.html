@@ -158,6 +158,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
         <input type="date" class="filter-inp" id="filter-date" onchange="setFilter(this.value)">
         <button class="btn btn-sm" onclick="setFilterHoy()" style="font-size:11px;padding:4px 10px">Hoy</button>
         <button class="btn btn-sm" onclick="clearFilter()" style="font-size:11px;padding:4px 10px;display:none" id="btn-clear-filter">✕ Todos</button>
+        <button class="btn btn-sm" id="btn-show-archived" onclick="toggleArchived()" style="font-size:11px;padding:4px 10px;display:none">Archivadas (0)</button>
       </div>
       <div id="req-list"></div>
     </div>
@@ -203,7 +204,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           <textarea id="dp-comment" rows="2" placeholder="Ej: aprobado con modificaciones, se corrigió el horario del lunes..."></textarea>
         </div>
         <div class="action-bar">
-          <button class="btn btn-delete btn-sm" id="btn-del" onclick="deleteSubmission()">✕ Borrar solicitud</button>
+          <button class="btn btn-delete btn-sm" id="btn-del" onclick="archiveSubmission()">Archivar solicitud</button>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm" onclick="closeDetail()">Cerrar</button>
             <button class="btn btn-approve btn-sm" id="btn-appr" onclick="approveReq()">Aprobar y migrar a Time Tracking →</button>
@@ -224,6 +225,7 @@ var requests          = [];
 var selectedId        = null;
 var editingRows       = {};
 var filterDate        = null;
+var showArchived      = false;
 var selectedSupervisor = null; // { id, name }
 
 // ── UTILS ──
@@ -254,6 +256,7 @@ function filteredRequests(){
     // Fallback manual: mostrar todas las solicitudes que tienen supervisorId
     filtered = requests.filter(function(r){ return r.supervisorId; });
   }
+  if(!showArchived) filtered = filtered.filter(function(r){ return !r.archived; });
   if(filterDate){
     filtered = filtered.filter(function(r){ return r.submittedAt && r.submittedAt.slice(0,10)===filterDate; });
   }
@@ -332,6 +335,7 @@ function onSupervisorChange(sel){
   }
   closeDetail();
   renderReqList();
+  updateArchivedBtn();
 }
 
 function onSupervisorManual(val){
@@ -384,6 +388,7 @@ function _afterRecargar(){
   document.getElementById('det-panel').style.display='none';
   document.getElementById('det-empty').style.display='flex';
   renderReqList();
+  updateArchivedBtn();
 }
 
 // ── RENDER LISTA ──
@@ -414,7 +419,12 @@ function renderReqList(){
       '<div class="req-meta">'+r.periodo+dateLabel+'</div>' +
       '<div class="req-footer">' +
         '<span style="font-size:12px;font-weight:600;color:var(--brand-d)">'+totalH(r.entries)+' hs</span>' +
-        '<span class="badge '+statusClass(r.status)+'">'+statusLabel(r.status)+'</span>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<span class="badge '+statusClass(r.status)+'">'+statusLabel(r.status)+'</span>' +
+          (!r.archived
+            ? '<button class="btn-icon del" title="Archivar solicitud" onclick="event.stopPropagation();archiveFromList('+r.id+')">✕</button>'
+            : '<button class="btn-icon" title="Desarchivar" onclick="event.stopPropagation();unarchiveFromList('+r.id+')" style="font-size:10px;padding:3px 6px;border:1px solid var(--border-med);border-radius:5px">↩</button>') +
+        '</div>' +
       '</div></div>';
   }).join('');
   document.getElementById('stat-p').textContent=vis.filter(function(r){return r.status==='pending';}).length;
@@ -436,6 +446,8 @@ function renderDetail(){
   document.getElementById('dp-badge').textContent = statusLabel(r.status);
   document.getElementById('btn-appr').style.display = ro?'none':'';
   document.getElementById('dp-dirty').style.display = 'none';
+  var btnDel = document.getElementById('btn-del');
+  if(btnDel) btnDel.textContent = r.archived ? 'Desarchivar' : 'Archivar solicitud';
 
   var hint = document.getElementById('dp-hint');
   if(ro){
@@ -630,23 +642,90 @@ function approveReq(){
     });
 }
 
-// ── BORRAR SOLICITUD ──
-function deleteSubmission(){
-  var r=requests.find(function(x){return x.id===selectedId;});
+// ── ELIMINAR DESDE LISTA (solo pending) ──
+// ── ARCHIVAR (desde lista) ──
+function archiveFromList(id){
+  var r = requests.find(function(x){ return x.id===id; });
   if(!r) return;
-  var msg = r.status==='approved'
-    ? 'Borrar esta solicitud del panel.\n\nNota: los registros en Time Tracking ya fueron creados y no se eliminan.\n\n¿Confirmar?'
-    : 'Borrar esta solicitud del panel. ¿Confirmar?';
+  if(!confirm('¿Archivar la solicitud de '+r.employeeName+' ('+r.periodo+')?\nVa a desaparecer de la vista pero podés recuperarla desde "Archivadas".')) return;
+  fetch('/api/submissions?id='+id, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ archived: true })
+  })
+  .then(function(res){
+    if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error al archivar'); });
+    var idx = requests.findIndex(function(x){ return x.id===id; });
+    if(idx !== -1) requests[idx].archived = true;
+    saveSubmissions();
+    if(selectedId===id){ selectedId=null; editingRows={}; document.getElementById('det-panel').style.display='none'; document.getElementById('det-empty').style.display='flex'; }
+    renderReqList();
+    updateArchivedBtn();
+  })
+  .catch(function(err){ alert(err.message||'Error al archivar la solicitud'); });
+}
+
+// ── DESARCHIVAR (desde lista) ──
+function unarchiveFromList(id){
+  fetch('/api/submissions?id='+id, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ archived: false })
+  })
+  .then(function(res){
+    if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error'); });
+    var idx = requests.findIndex(function(x){ return x.id===id; });
+    if(idx !== -1) requests[idx].archived = false;
+    saveSubmissions();
+    renderReqList();
+    updateArchivedBtn();
+  })
+  .catch(function(err){ alert(err.message||'Error al desarchivar'); });
+}
+
+// ── ARCHIVAR (desde panel de detalle) ──
+function archiveSubmission(){
+  var r = requests.find(function(x){ return x.id===selectedId; });
+  if(!r) return;
+  var msg = r.archived
+    ? '¿Desarchivar esta solicitud?'
+    : (r.status==='approved'
+        ? 'Archivar esta solicitud del panel.\n\nNota: los registros en Time Tracking ya fueron creados y no se eliminan.\n\n¿Confirmar?'
+        : 'Archivar esta solicitud del panel. Podés recuperarla desde "Archivadas". ¿Confirmar?');
   if(!confirm(msg)) return;
-  // Cerrar panel de inmediato y eliminar localmente
-  requests = requests.filter(function(x){ return x.id !== r.id; });
-  localStorage.setItem(LS_KEY, JSON.stringify(requests));
+  var newArchived = !r.archived;
+  var idx = requests.findIndex(function(x){ return x.id===r.id; });
+  if(idx !== -1) requests[idx].archived = newArchived;
+  saveSubmissions();
   selectedId = null; editingRows = {};
   document.getElementById('det-panel').style.display = 'none';
   document.getElementById('det-empty').style.display = 'flex';
   renderReqList();
-  // Sincronizar con Blob en background
-  fetch('/api/submissions?id='+r.id, {method:'DELETE'}).catch(function(){});
+  updateArchivedBtn();
+  fetch('/api/submissions?id='+r.id, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ archived: newArchived })
+  }).catch(function(){});
+}
+
+// ── TOGGLE VER ARCHIVADAS ──
+function toggleArchived(){
+  showArchived = !showArchived;
+  updateArchivedBtn();
+  renderReqList();
+}
+
+function updateArchivedBtn(){
+  var btn = document.getElementById('btn-show-archived');
+  if(!btn) return;
+  var count = selectedSupervisor
+    ? requests.filter(function(r){ return r.archived && String(r.supervisorId)===String(selectedSupervisor.id); }).length
+    : 0;
+  btn.textContent = showArchived ? 'Ocultar archivadas' : ('Archivadas (' + count + ')');
+  btn.style.display = (count > 0 || showArchived) ? '' : 'none';
+  if(showArchived) btn.classList.add('filter-active');
+  else btn.classList.remove('filter-active');
 }
 
 function closeDetail(){

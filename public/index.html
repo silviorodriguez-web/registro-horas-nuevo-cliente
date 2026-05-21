@@ -155,6 +155,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
         <select id="sel-supervisor-colab" disabled onchange="checkConfirmarBtn()">
           <option value="">Cargando supervisores...</option>
         </select>
+        <div id="supervisor-ausente-msg" class="alert-warn-inline" style="display:none"></div>
       </div>
       <div class="fg">
         <label>Tu nombre</label>
@@ -312,12 +313,23 @@ var PROXY     = '/api/humand';
 var FOLDER_ID = 1359526;
 var PROJECTS  = ['AFISA','Centro de Contacto','DINAVI','Isla de Flores','MEVIR','Promociones','Recupero BROU','UPLA','Cobranza Consumo','Experiencia al cliente'];
 var LS_KEY    = 'humand-horas-v5';
+// Aprobadores alternativos: cuando el supervisor principal está de vacaciones
+var BACKUP_DATA = [
+  { supervisorName: 'Sibele Troitiño',        backupName: 'Selena González' },
+  { supervisorName: 'Fabiana Lascano',         backupName: 'Cáceres Texeira Juan Martín' },
+  { supervisorName: 'Selena González',         backupName: 'Paula Bentancur Perdomo' },
+  { supervisorName: 'Paula Bentancur Perdomo', backupName: 'Selena González' },
+];
+var SUPERVISOR_BACKUPS = {}; // { supervisorId: { id, name } } — se construye al cargar supervisores
+function normName(n){ return n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+function normNameSorted(n){ return normName(n).split(/s+/).sort().join(' '); }
 
 // ── ESTADO ──
-var currentUser       = null;
-var currentSupervisor = null;
-var colabEntries      = [];
-var colabNextId       = 1;
+var currentUser         = null;
+var currentSupervisor   = null;
+var _effectiveSupervisor = null;
+var colabEntries        = [];
+var colabNextId         = 1;
 
 // Bloquear días futuros en el input de fecha al cargar la página
 (function(){
@@ -354,6 +366,37 @@ function checkConfirmarBtn(){
   var selUser = document.getElementById('sel-usuario');
   var selSup  = document.getElementById('sel-supervisor-colab');
   document.getElementById('btn-seleccionar').disabled = !selUser.value || !selSup.value;
+  checkSupervisorDisponible();
+}
+
+function checkSupervisorDisponible(){
+  var selSup     = document.getElementById('sel-supervisor-colab');
+  var msgDiv     = document.getElementById('supervisor-ausente-msg');
+  var supervisorId = selSup.value ? parseInt(selSup.value) : null;
+  if(!supervisorId){ msgDiv.style.display='none'; _effectiveSupervisor=null; return; }
+  var hoy = todayStr();
+  apiCall('/time-off/requests', {userId: supervisorId, states:'APPROVED', fromDate:hoy, toDate:hoy})
+    .then(function(data){
+      var items = data.items || data || [];
+      if(items.length > 0){
+        var backup = SUPERVISOR_BACKUPS[supervisorId];
+        if(backup){
+          _effectiveSupervisor = backup;
+          msgDiv.textContent = '⚠️ Tu supervisor está ausente hoy. Tu solicitud será enviada a ' + backup.name + ' para su aprobación.';
+        } else {
+          _effectiveSupervisor = null;
+          msgDiv.textContent = '⚠️ Tu supervisor está ausente hoy. Contactá a RRHH para coordinar la aprobación.';
+        }
+        msgDiv.style.display = 'block';
+      } else {
+        _effectiveSupervisor = null;
+        msgDiv.style.display = 'none';
+      }
+    })
+    .catch(function(){
+      _effectiveSupervisor = null;
+      msgDiv.style.display = 'none';
+    });
 }
 
 function cargarSegmentos(){
@@ -398,6 +441,19 @@ function cargarSupervisoresColab(){
     .then(function(data){
       var users = data.items || data || [];
       if (!users.length) throw new Error('Sin usuarios supervisores');
+      // Construir mapa de backups con IDs reales de Humand
+      var nameMap = {}, nameMapS = {};
+      users.forEach(function(u){
+        var full = (u.firstName + ' ' + u.lastName).trim();
+        nameMap[normName(full)] = { id: u.id, name: full };
+        nameMapS[normNameSorted(full)] = { id: u.id, name: full };
+      });
+      BACKUP_DATA.forEach(function(entry){
+        var sup = nameMap[normName(entry.supervisorName)] || nameMapS[normNameSorted(entry.supervisorName)];
+        var bkp = nameMap[normName(entry.backupName)]    || nameMapS[normNameSorted(entry.backupName)];
+        if(sup && bkp) SUPERVISOR_BACKUPS[sup.id] = bkp;
+        else console.warn('[backups] Sin match para:', !sup ? entry.supervisorName : entry.backupName);
+      });
       sel.innerHTML = '<option value="">Seleccioná tu supervisor...</option>' +
         users.map(function(u){
           return '<option value="' + u.id + '" data-name="' + u.firstName + ' ' + u.lastName + '">' +
@@ -424,16 +480,23 @@ function seleccionarUsuario(){
     firstName: opt.getAttribute('data-fn'),
     lastName:  opt.getAttribute('data-ln'),
   };
-  currentSupervisor = {
-    id:   optSup.value,
-    name: optSup.getAttribute('data-name'),
-  };
+  currentSupervisor = _effectiveSupervisor
+    ? { id: String(_effectiveSupervisor.id), name: _effectiveSupervisor.name }
+    : { id: optSup.value, name: optSup.getAttribute('data-name') };
   var nombre = currentUser.firstName + ' ' + currentUser.lastName;
   document.getElementById('av').textContent      = initials(currentUser.firstName, currentUser.lastName);
   document.getElementById('av-name').textContent = nombre;
   document.getElementById('panel-carga').style.display = 'block';
   document.getElementById('panel-carga').scrollIntoView({behavior:'smooth', block:'start'});
   renderMisEnvios();
+  // Obtener email del colaborador en background para usarlo en notificaciones
+  apiCall('/users', { search: nombre, limit: 10 })
+    .then(function(res){
+      var users = (res && res.users) ? res.users : [];
+      var match = users.find(function(u){ return u.id == currentUser.id; });
+      if(match && match.email) currentUser.email = match.email;
+    })
+    .catch(function(){});
 }
 
 // ── MIS ENVÍOS (historial del colaborador) ──
@@ -490,6 +553,9 @@ function addEntry(){
     alert('La hora de salida (' + t + ') aún no pasó.\nSolo podés registrar horas que ya ocurrieron.');
     return;
   }
+  var pDesde = getPeriodoDesde(), pHasta = getPeriodoHasta();
+  if (pDesde && d < pDesde) { alert('La fecha ' + d + ' es anterior al período seleccionado.\nEl período empieza el ' + pDesde + '.'); return; }
+  if (pHasta && d > pHasta) { alert('La fecha ' + d + ' está fuera del período seleccionado.\nEl período finaliza el ' + pHasta + '.'); return; }
   if (calcH(f,t) <= 0) { alert('El horario de fin debe ser posterior al inicio'); return; }
   colabEntries.push({id:colabNextId++, project:p, day:d, from:f, to:t, desc:desc});
   document.getElementById('c-prj').value  = '';
@@ -558,6 +624,7 @@ function submitWeek(){
         employeeId:  currentUser.id,
         employeeInternalId: currentUser.employeeInternalId || null,
         employeeName: nombre,
+        employeeEmail: currentUser.email || null,
         supervisorId:   currentSupervisor.id,
         supervisorName: currentSupervisor.name,
         periodo:     periodo,
