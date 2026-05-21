@@ -248,13 +248,13 @@ function filteredRequests(){
   if(!selectedSupervisor) return null; // null = aún no seleccionó supervisor
   var filtered;
   if(selectedSupervisor.id) {
-    // Supervisor identificado: mostrar solo sus solicitudes
+    // Supervisor identificado: sus solicitudes + las sin supervisorId asignado
     filtered = requests.filter(function(r){
-      return r.supervisorId && String(r.supervisorId) === String(selectedSupervisor.id);
+      return !r.supervisorId || String(r.supervisorId) === String(selectedSupervisor.id);
     });
   } else {
-    // Fallback manual: mostrar todas las solicitudes que tienen supervisorId
-    filtered = requests.filter(function(r){ return r.supervisorId; });
+    // Fallback manual: mostrar todas
+    filtered = requests.slice();
   }
   if(!showArchived) filtered = filtered.filter(function(r){ return !r.archived; });
   if(filterDate){
