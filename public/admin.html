@@ -249,13 +249,12 @@ function filteredRequests(){
   if(!selectedSupervisor) return null; // null = aún no seleccionó supervisor
   var filtered;
   if(selectedSupervisor.id) {
-    // Supervisor identificado: sus solicitudes + las sin supervisorId asignado
+    // Supervisor identificado: solo sus solicitudes
     filtered = requests.filter(function(r){
-      return !r.supervisorId || String(r.supervisorId) === String(selectedSupervisor.id);
+      return String(r.supervisorId) === String(selectedSupervisor.id);
     });
   } else {
-    // Fallback manual: mostrar todas
-    filtered = requests.slice();
+    filtered = requests.filter(function(r){ return r.supervisorId; });
   }
   if(!showArchived) filtered = filtered.filter(function(r){ return !r.archived; });
   if(filterDate){
@@ -758,7 +757,7 @@ function updateArchivedBtn(){
   var btn = document.getElementById('btn-show-archived');
   if(!btn) return;
   var count = selectedSupervisor
-    ? requests.filter(function(r){ return r.archived && (!r.supervisorId || String(r.supervisorId)===String(selectedSupervisor.id)); }).length
+    ? requests.filter(function(r){ return r.archived && String(r.supervisorId)===String(selectedSupervisor.id); }).length
     : 0;
   btn.textContent = showArchived ? 'Ocultar archivadas' : ('Archivadas (' + count + ')');
   btn.style.display = (selectedSupervisor && (count > 0 || showArchived)) ? '' : 'none';
