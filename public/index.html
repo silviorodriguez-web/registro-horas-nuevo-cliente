@@ -159,7 +159,15 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       </div>
       <div class="fg">
         <label>Tu nombre</label>
-        <select id="sel-usuario" disabled onchange="checkConfirmarBtn()">
+        <div style="position:relative" id="usuario-wrap">
+          <input type="text" id="usuario-search" placeholder="Escribí tu nombre para buscar..." autocomplete="off" disabled
+            oninput="filtrarUsuarios(this.value)"
+            onfocus="abrirDropdownUsuarios()"
+            onblur="cerrarDropdownUsuarios()"
+            onkeydown="navDropdownUsuarios(event)">
+          <div id="usuario-dropdown" style="display:none;position:absolute;z-index:200;width:100%;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:220px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.13);top:calc(100% + 3px);left:0"></div>
+        </div>
+        <select id="sel-usuario" style="display:none" onchange="checkConfirmarBtn()">
           <option value="">Seleccioná tu nombre...</option>
         </select>
       </div>
@@ -399,29 +407,97 @@ function checkSupervisorDisponible(){
     });
 }
 
+var _allUsers = [];
+
 function cargarSegmentos(){
   var selUser = document.getElementById('sel-usuario');
+  var searchInput = document.getElementById('usuario-search');
   document.getElementById('loading-msg').style.display = 'block';
-  selUser.innerHTML = '<option value="">Cargando usuarios...</option>';
+  searchInput.placeholder = 'Cargando usuarios...';
   apiCall('/segmentations/users', { segmentationItemIds: SEGMENTATION_ITEM_ID, limit: 100 })
     .then(function(data){
       document.getElementById('loading-msg').style.display = 'none';
       var items = data.items || data || [];
       if (!items.length) {
-        selUser.innerHTML = '<option value="">Sin usuarios configurados</option>';
+        searchInput.placeholder = 'Sin usuarios configurados';
         return;
       }
-      selUser.innerHTML = '<option value="">Seleccioná tu nombre...</option>' +
+      _allUsers = items;
+      // hidden select para compatibilidad con seleccionarUsuario()
+      selUser.innerHTML = '<option value=""></option>' +
         items.map(function(u){
           return '<option value="' + u.id + '" data-eid="' + (u.employeeInternalId||'') + '" data-fn="' + u.firstName + '" data-ln="' + u.lastName + '">' +
             u.firstName + ' ' + u.lastName + '</option>';
         }).join('');
-      selUser.disabled = false;
+      searchInput.placeholder = 'Escribí tu nombre para buscar...';
+      searchInput.disabled = false;
     })
     .catch(function(){
       document.getElementById('loading-msg').style.display = 'none';
-      selUser.innerHTML = '<option value="">Error cargando usuarios</option>';
+      searchInput.placeholder = 'Error cargando usuarios';
     });
+}
+
+function filtrarUsuarios(q){
+  var dd = document.getElementById('usuario-dropdown');
+  if(!_allUsers.length){ dd.style.display='none'; return; }
+  var norm = q.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  var filtered = !q.trim()
+    ? _allUsers
+    : _allUsers.filter(function(u){
+        var name = (u.firstName+' '+u.lastName).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+        return name.includes(norm);
+      });
+  if(!filtered.length){
+    dd.innerHTML='<div style="padding:10px 12px;color:#888;font-size:13px">Sin resultados</div>';
+    dd.style.display='block'; return;
+  }
+  dd.innerHTML = filtered.slice(0,60).map(function(u,i){
+    var fn = u.firstName+' '+u.lastName;
+    return '<div class="u-opt" data-uid="'+u.id+'" style="padding:9px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f3f4f6" '+
+      'onmousedown="seleccionarDesdeDropdown('+u.id+')" '+
+      'onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'\'">'+fn+'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function abrirDropdownUsuarios(){
+  if(_allUsers.length) filtrarUsuarios(document.getElementById('usuario-search').value);
+}
+
+function cerrarDropdownUsuarios(){
+  setTimeout(function(){ document.getElementById('usuario-dropdown').style.display='none'; }, 160);
+}
+
+function navDropdownUsuarios(e){
+  var dd = document.getElementById('usuario-dropdown');
+  var opts = dd.querySelectorAll('.u-opt');
+  var active = dd.querySelector('.u-opt.focused');
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    var next = active ? active.nextSibling : opts[0];
+    if(active) { active.classList.remove('focused'); active.style.background=''; }
+    if(next){ next.classList.add('focused'); next.style.background='#eff6ff'; next.scrollIntoView({block:'nearest'}); }
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    var prev = active ? active.previousSibling : opts[opts.length-1];
+    if(active){ active.classList.remove('focused'); active.style.background=''; }
+    if(prev){ prev.classList.add('focused'); prev.style.background='#eff6ff'; prev.scrollIntoView({block:'nearest'}); }
+  } else if(e.key==='Enter'){
+    if(active){ e.preventDefault(); var uid=parseInt(active.getAttribute('data-uid')); seleccionarDesdeDropdown(uid); }
+  } else if(e.key==='Escape'){
+    dd.style.display='none';
+  }
+}
+
+function seleccionarDesdeDropdown(userId){
+  var u = _allUsers.find(function(x){ return x.id===userId; });
+  if(!u) return;
+  document.getElementById('usuario-search').value = u.firstName+' '+u.lastName;
+  document.getElementById('usuario-dropdown').style.display='none';
+  var sel = document.getElementById('sel-usuario');
+  sel.value = String(userId);
+  checkConfirmarBtn();
 }
 
 function cargarSupervisoresColab(){
