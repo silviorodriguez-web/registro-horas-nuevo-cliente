@@ -292,7 +292,7 @@ function cargarSupervisores(){
       var items = data.items || data || [];
       // Buscar la segmentación cuyo nombre incluya "Supervisores"
       var seg = items.find(function(s){
-        return s.name && s.name.toLowerCase().includes('supervisor');
+        return s.name && s.name.toLowerCase().includes('supervisores');
       });
       if (!seg) throw new Error('Segmentación Supervisores no encontrada');
       // seg puede tener .segmentationItems[] o .items[] con los IDs

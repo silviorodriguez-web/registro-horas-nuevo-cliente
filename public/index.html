@@ -368,7 +368,7 @@ function apiCall(path, params, method, body){
 }
 
 // ── CARGAR USUARIOS Y SUPERVISORES ──
-var SEGMENTATION_ITEM_ID = 1576002;
+var SEGMENTATION_ITEM_ID = 1499762;
 
 function checkConfirmarBtn(){
   var selUser = document.getElementById('sel-usuario');
@@ -506,7 +506,7 @@ function cargarSupervisoresColab(){
     .then(function(data){
       var items = data.items || data || [];
       var seg = items.find(function(s){
-        return s.name && s.name.toLowerCase().includes('supervisor');
+        return s.name && s.name.toLowerCase().includes('supervisores');
       });
       if (!seg) throw new Error('Segmentación Supervisores no encontrada');
       var segItems = seg.segmentationItems || seg.items || [];
