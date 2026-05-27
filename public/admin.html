@@ -725,6 +725,22 @@ function toggleArchived(){
   renderReqList();
 }
 
+function notifyWallDeletedPending(r, comment){
+  if(r.status !== 'pending') return;
+  var eid = r.employeeInternalId ? String(r.employeeInternalId) : null;
+  if(!eid) return;
+  var supName = (selectedSupervisor && selectedSupervisor.name) ? selectedSupervisor.name : (r.supervisorName || 'tu supervisor/a');
+  var obs = (comment || '').trim();
+  var body = 'Hola '+r.employeeName+', tu solicitud de registro de horas del período '+r.periodo+' fue eliminada por '+supName+' sin ser procesada.';
+  if(obs) body += ' Observación: "'+obs+'".';
+  body += ' Si tenés alguna consulta, comunicate directamente con '+supName+'.';
+  apiCall('/posts', null, 'POST', {
+    body: body,
+    sendNotification: true,
+    segmentationUsers: [eid]
+  });
+}
+
 function deleteFromList(id){
   var r = requests.find(function(x){ return x.id===id; });
   if(!r) return;
@@ -732,6 +748,7 @@ function deleteFromList(id){
   fetch('/api/submissions?id='+id, { method:'DELETE' })
   .then(function(res){
     if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error al borrar'); });
+    notifyWallDeletedPending(r, r.comment);
     requests = requests.filter(function(x){ return x.id!==id; });
     saveSubmissions();
     if(selectedId===id){ selectedId=null; editingRows={}; document.getElementById('det-panel').style.display='none'; document.getElementById('det-empty').style.display='flex'; }
@@ -748,6 +765,8 @@ function deleteSubmission(){
   fetch('/api/submissions?id='+r.id, { method:'DELETE' })
   .then(function(res){
     if(!res.ok) return res.json().then(function(d){ throw new Error(d.error||'Error al borrar'); });
+    var dpComment = document.getElementById('dp-comment');
+    notifyWallDeletedPending(r, dpComment ? dpComment.value : r.comment);
     requests = requests.filter(function(x){ return x.id!==r.id; });
     saveSubmissions();
     selectedId=null; editingRows={};
