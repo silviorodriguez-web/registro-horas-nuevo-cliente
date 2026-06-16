@@ -122,9 +122,44 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 /* SPINNER */
 .spinner { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:6px; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* LOGIN */
+.login-overlay { position:fixed; inset:0; background:#EAECF0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px; }
+.login-card { background:#fff; border-radius:16px; border:1px solid var(--border); box-shadow:0 8px 40px rgba(0,0,0,.10),0 2px 8px rgba(0,0,0,.04); padding:40px; width:100%; max-width:440px; }
+.login-icon-wrap { width:52px; height:52px; background:var(--brand-l); border-radius:14px; display:flex; align-items:center; justify-content:center; margin-bottom:22px; }
+.login-title { font-size:22px; font-weight:700; letter-spacing:-.4px; margin-bottom:6px; }
+.login-sub { font-size:13px; color:var(--muted); margin-bottom:28px; line-height:1.55; }
+.login-lbl { display:block; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.login-inp { width:100%; padding:11px 14px; border:1.5px solid var(--border-med); border-radius:10px; font-size:14px; font-family:'DM Sans',sans-serif; color:var(--text); background:#F8F9FC; outline:none; transition:.15s; }
+.login-inp:focus { border-color:var(--brand); background:#fff; box-shadow:0 0 0 3px rgba(59,95,191,.12); }
+.btn-login { width:100%; padding:13px; background:var(--brand-d); color:#fff; border:none; border-radius:10px; font-size:14px; font-weight:600; font-family:'DM Sans',sans-serif; cursor:pointer; transition:.15s; margin-top:10px; }
+.btn-login:hover:not(:disabled) { background:var(--brand); }
+.btn-login:disabled { opacity:.6; cursor:not-allowed; }
+.login-err { margin-top:12px; padding:10px 14px; background:var(--e-bg); color:var(--err); border-radius:8px; font-size:12px; line-height:1.5; display:none; }
+.welcome-banner { background:linear-gradient(135deg,var(--brand-d) 0%,var(--brand) 100%); color:#fff; border-radius:var(--rl); padding:18px 24px; margin-bottom:16px; display:none; }
+.welcome-banner h2 { font-size:18px; font-weight:700; margin-bottom:2px; }
+.welcome-banner p { font-size:13px; opacity:.82; }
+.logout-btn { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:6px; color:rgba(255,255,255,.8); font-size:12px; cursor:pointer; padding:5px 12px; font-family:'DM Sans',sans-serif; transition:.15s; display:none; }
+.logout-btn:hover { background:rgba(255,255,255,.2); }
 </style>
 </head>
 <body>
+
+<div id="login-screen" class="login-overlay">
+  <div class="login-card">
+    <div class="login-icon-wrap">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V5L12 2z" fill="var(--brand-d)"/><path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="login-title">Registro de Horas</div>
+    <div class="login-sub">Ingresá tu email de Humand para identificarte y comenzar a cargar tus horas.</div>
+    <div>
+      <label class="login-lbl" for="login-email">Email</label>
+      <input class="login-inp" type="email" id="login-email" placeholder="nombre@empresa.com" autocomplete="email" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Entrar</button>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
 
 <div class="topbar">
   <div class="logo">
@@ -136,6 +171,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       <div class="av" id="av">--</div>
       <span id="av-name">Seleccioná usuario</span>
     </div>
+    <button class="logout-btn" id="topbar-logout" onclick="doLogout()">Salir</button>
   </div>
 </div>
 
@@ -143,6 +179,12 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
   <div class="page-hd">
     <h1>Carga semanal de horas</h1>
     <p>Seleccioná tu nombre, completá tus entradas y enviá para revisión del supervisor.</p>
+  </div>
+
+  <!-- Bienvenida post-login -->
+  <div class="welcome-banner" id="welcome-banner">
+    <h2 id="wb-name">Hola!</h2>
+    <p>Bienvenido/a al sistema de registro de horas de Humand.</p>
   </div>
 
   <!-- Selector de usuario desde Humand -->
@@ -157,7 +199,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
         </select>
         <div id="supervisor-ausente-msg" class="alert-warn-inline" style="display:none"></div>
       </div>
-      <div class="fg">
+      <div class="fg" id="nombre-col">
         <label>Tu nombre</label>
         <div style="position:relative" id="usuario-wrap">
           <input type="text" id="usuario-search" placeholder="Escribí tu nombre para buscar..." autocomplete="off" disabled
@@ -171,7 +213,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
           <option value="">Seleccioná tu nombre...</option>
         </select>
       </div>
-      <button class="btn-cargar" id="btn-seleccionar" onclick="seleccionarUsuario()" disabled>
+      <button class="btn-cargar" id="btn-seleccionar" onclick="_sessionMode?seleccionarDesdeSession():seleccionarUsuario()" disabled>
         Confirmar
       </button>
     </div>
@@ -371,9 +413,13 @@ function apiCall(path, params, method, body){
 var SEGMENTATION_ITEM_ID = 1499762;
 
 function checkConfirmarBtn(){
-  var selUser = document.getElementById('sel-usuario');
-  var selSup  = document.getElementById('sel-supervisor-colab');
-  document.getElementById('btn-seleccionar').disabled = !selUser.value || !selSup.value;
+  var selSup = document.getElementById('sel-supervisor-colab');
+  if(_sessionMode){
+    document.getElementById('btn-seleccionar').disabled = !selSup.value;
+  } else {
+    var selUser = document.getElementById('sel-usuario');
+    document.getElementById('btn-seleccionar').disabled = !selUser.value || !selSup.value;
+  }
   checkSupervisorDisponible();
 }
 
@@ -1065,7 +1111,86 @@ function getPeriodoHasta(){
   return document.getElementById('rango-hasta').value || fmtDate(new Date());
 }
 
+// ── SESIÓN / LOGIN ──
+var SESSION_KEY = 'humand-session-v5';
+var SESSION_TTL = 8 * 60 * 60 * 1000; // 8 horas
+var _sessionMode = false;
+
+function getSession(){
+  try{
+    var s = JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+    if(!s) return null;
+    if(s.expires && Date.now() > s.expires){ localStorage.removeItem(SESSION_KEY); return null; }
+    return s;
+  }catch(e){ return null; }
+}
+
+function doLogin(){
+  var email = (document.getElementById('login-email').value||'').trim().toLowerCase();
+  if(!email){ setLoginErr('Ingresá tu email.'); return; }
+  var btn = document.getElementById('btn-login');
+  btn.disabled=true; btn.textContent='Verificando...';
+  setLoginErr('');
+  apiCall('/users', { search: email, limit: 30 })
+    .then(function(res){
+      var users=(res&&res.users)?res.users:(Array.isArray(res)?res:[]);
+      var match=users.find(function(u){ return u.email&&u.email.toLowerCase()===email; });
+      if(!match) throw new Error('No encontramos ningún usuario con ese email en Humand. Verificá que sea el email con el que accedés a la app.');
+      var s={ id:match.id, employeeInternalId:match.employeeInternalId||null, firstName:match.firstName||'', lastName:match.lastName||'', email:match.email||email, expires:Date.now()+SESSION_TTL };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+      applySession(s);
+    })
+    .catch(function(err){
+      btn.disabled=false; btn.textContent='Entrar';
+      setLoginErr(err.message||'Error al verificar tu email. Intentá de nuevo.');
+    });
+}
+
+function setLoginErr(msg){
+  var el=document.getElementById('login-err');
+  el.textContent=msg; el.style.display=msg?'block':'none';
+}
+
+function applySession(s){
+  _sessionMode=true;
+  currentUser={ id:s.id, employeeInternalId:s.employeeInternalId, firstName:s.firstName, lastName:s.lastName, email:s.email };
+  document.getElementById('av').textContent=initials(s.firstName,s.lastName);
+  document.getElementById('av-name').textContent=s.firstName+' '+s.lastName;
+  document.getElementById('topbar-logout').style.display='';
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('welcome-banner').style.display='block';
+  document.getElementById('wb-name').textContent='Hola, '+s.firstName+'!';
+  document.getElementById('nombre-col').style.display='none';
+  document.querySelector('.user-selector-card h2').textContent='Seleccioná tu supervisor';
+  document.querySelector('.user-selector-card p').textContent='Elegí al supervisor al que va dirigida tu solicitud de horas.';
+  document.getElementById('btn-seleccionar').textContent='Continuar';
+}
+
+function seleccionarDesdeSession(){
+  var selSup=document.getElementById('sel-supervisor-colab');
+  var optSup=selSup.options[selSup.selectedIndex];
+  if(!optSup||!optSup.value) return;
+  currentSupervisor=_effectiveSupervisor
+    ?{ id:String(_effectiveSupervisor.id), name:_effectiveSupervisor.name, originalSupervisorName:_effectiveSupervisor._originalSupervisorName||null }
+    :{ id:optSup.value, name:optSup.getAttribute('data-name'), originalSupervisorName:null };
+  document.getElementById('panel-carga').style.display='block';
+  document.getElementById('panel-carga').scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelector('.user-selector-card').style.display='none';
+  renderMisEnvios();
+}
+
+function doLogout(){
+  localStorage.removeItem(SESSION_KEY);
+  location.reload();
+}
+
 // ── INIT ──
+var _initSession = getSession();
+if(_initSession){
+  applySession(_initSession);
+} else {
+  document.getElementById('login-screen').style.display='flex';
+}
 cargarSegmentos();
 cargarSupervisoresColab();
 updateSemanaLabel();
