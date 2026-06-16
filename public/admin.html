@@ -628,12 +628,13 @@ function approveReq(){
   }
 
   // Obtener el employeeInternalId real via GET /users?search=nombre
+  var resolvedEid;
   apiCall('/users', { search: r.employeeName, limit: 10 })
     .then(function(res){
       var users = (res && res.users) ? res.users : [];
       var match = users.find(function(u){ return u.id == r.employeeId; });
-      var eid = (match && match.employeeInternalId) ? match.employeeInternalId : String(r.employeeId);
-      return processEntry(eid, 0);
+      resolvedEid = (match && match.employeeInternalId) ? match.employeeInternalId : String(r.employeeId);
+      return processEntry(resolvedEid, 0);
     })
     .then(function(){
       r.status     = 'approved';
@@ -641,6 +642,7 @@ function approveReq(){
       r.approvedBy = selectedSupervisor.name;
       saveSubmissions();
       saveSubmissionToKV(r);
+      notifyWallApproved(r, resolvedEid);
       btn.textContent='Aprobar y migrar →'; btn.disabled=false; btnDel.disabled=false;
       renderDetail(); renderReqList();
     })
@@ -738,6 +740,19 @@ function notifyWallDeletedPending(r, comment){
     body: body,
     sendNotification: true,
     segmentationUsers: [eid]
+  });
+}
+
+function notifyWallApproved(r, eid){
+  if(!eid) return;
+  var supName = (selectedSupervisor && selectedSupervisor.name) ? selectedSupervisor.name : (r.approvedBy || 'tu supervisor/a');
+  var obs = (r.comment || '').trim();
+  var body = 'Hola '+r.employeeName+', tu registro de horas del período '+r.periodo+' fue aprobado por '+supName+'. Tus horas ya fueron registradas en el sistema.';
+  if(obs) body += ' Observación: "'+obs+'".';
+  apiCall('/posts', null, 'POST', {
+    body: body,
+    sendNotification: true,
+    segmentationUsers: [String(eid)]
   });
 }
 
