@@ -290,6 +290,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
         <div style="display:flex; justify-content:flex-end">
           <button class="btn btn-primary" onclick="addEntry()">+ Agregar entrada</button>
         </div>
+        <div id="entry-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;font-size:12px;color:#92400e;line-height:1.5"></div>
       </div>
     </div>
 
@@ -352,10 +353,11 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       </div>
     </div>
 
-    <!-- Historial de envíos del colaborador -->
-    <div id="mis-envios" style="display:none"></div>
   </div>
 </div>
+
+<!-- Historial de envíos del colaborador (visible apenas el usuario se loguea) -->
+<div id="mis-envios" style="display:none;max-width:780px;margin:0 auto;padding:0 16px 32px"></div>
 
 <script>
 // ── CONSTANTES ──
@@ -621,6 +623,21 @@ function seleccionarUsuario(){
     .catch(function(){});
 }
 
+// ── HISTORIAL: resumen compacto de proyectos por envío ──
+function buildProyectosResumen(entries) {
+  if (!entries || !entries.length) return '';
+  var byProject = {};
+  entries.forEach(function(e) {
+    if (!byProject[e.project]) byProject[e.project] = [];
+    var label = new Date(e.day+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+    if (byProject[e.project].indexOf(label) === -1) byProject[e.project].push(label);
+  });
+  var parts = Object.keys(byProject).map(function(prj) {
+    return '<span style="font-weight:600">'+prj+'</span>: '+byProject[prj].join(', ');
+  });
+  return '<div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.7">'+parts.join(' &nbsp;&middot;&nbsp; ')+'</div>';
+}
+
 // ── MIS ENVÍOS (historial del colaborador) ──
 function renderMisEnvios(){
   if(!currentUser) return;
@@ -638,6 +655,7 @@ function renderMisEnvios(){
             '<div style="font-weight:600;font-size:13px">'+s.periodo+'</div>' +
             '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+s.totalHoras+' hs · '+
               new Date(s.submittedAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div>'+
+            buildProyectosResumen(s.entries)+
             ret+
           '</div>' +
           '<span class="badge '+statusClass(s.status)+'">'+statusLabel(s.status)+'</span>'+
@@ -662,7 +680,49 @@ function nowTimeStr(){
   return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
+// ── VALIDACIONES DE NEGOCIO ──
+var GRACE_DAYS_LIQUIDACION = 3;
+
+function hasTimeOverlap(entries, day, from, to) {
+  return entries.some(function(e) {
+    return e.day === day && from < e.to && e.from < to;
+  });
+}
+
+function getLiquidacionPeriodo(dateStr) {
+  var d = new Date(dateStr + 'T12:00:00');
+  var y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  var desde = day >= 21 ? new Date(y, m, 21) : new Date(y, m - 1, 21);
+  var hasta  = day >= 21 ? new Date(y, m + 1, 20) : new Date(y, m, 20);
+  return {
+    desde: fmtDate(desde),
+    hasta:  fmtDate(hasta),
+    label: fmtLabel(desde) + ' – ' + fmtLabel(hasta) + ' ' + hasta.getFullYear()
+  };
+}
+
+function isPeriodoCerrado(dateStr) {
+  var p = getLiquidacionPeriodo(dateStr);
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var cierre = new Date(p.hasta + 'T12:00:00');
+  cierre.setDate(cierre.getDate() + GRACE_DAYS_LIQUIDACION);
+  return hoy > cierre;
+}
+
+function showEntryError(msg) {
+  var el = document.getElementById('entry-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearEntryError() {
+  var el = document.getElementById('entry-error');
+  if (el) el.style.display = 'none';
+}
+
 function addEntry(){
+  clearEntryError();
   var p = document.getElementById('c-prj').value;
   var f = document.getElementById('c-from').value;
   var t = document.getElementById('c-to').value;
@@ -679,6 +739,16 @@ function addEntry(){
   if (pDesde && d < pDesde) { alert('La fecha ' + d + ' es anterior al período seleccionado.\nEl período empieza el ' + pDesde + '.'); return; }
   if (pHasta && d > pHasta) { alert('La fecha ' + d + ' está fuera del período seleccionado.\nEl período finaliza el ' + pHasta + '.'); return; }
   if (calcH(f,t) <= 0) { alert('El horario de fin debe ser posterior al inicio'); return; }
+  if (isPeriodoCerrado(d)) {
+    var liq = getLiquidacionPeriodo(d);
+    showEntryError('⚠ El período de liquidación ' + liq.label + ' ya está cerrado. Si necesitás registrar estas horas, consultá con tu supervisor.');
+    return;
+  }
+  if (hasTimeOverlap(colabEntries, d, f, t)) {
+    var conf = colabEntries.find(function(e){ return e.day === d && f < e.to && e.from < t; });
+    showEntryError('⚠ Franja horaria ocupada: ya hay una entrada el ' + d + ' de ' + conf.from + ' a ' + conf.to + ' (' + conf.project + '). Las franjas no pueden superponerse.');
+    return;
+  }
   colabEntries.push({id:colabNextId++, project:p, day:d, from:f, to:t, desc:desc});
   document.getElementById('c-prj').value  = '';
   document.getElementById('c-desc').value = '';
@@ -992,6 +1062,17 @@ function handleCSVImport(input) {
         errors.push({ row: rowNum, msg: 'Hora de salida (' + hasta + ') debe ser posterior al ingreso (' + desde + ').' });
         return;
       }
+      if (isPeriodoCerrado(dia)) {
+        var liqInfo = getLiquidacionPeriodo(dia);
+        errors.push({ row: rowNum, msg: 'Período de liquidación ' + liqInfo.label + ' ya cerrado. No se pueden agregar horas de ese período.' });
+        return;
+      }
+      var todasEntradas = colabEntries.concat(valid);
+      if (hasTimeOverlap(todasEntradas, dia, desdePad, hastaPad)) {
+        var confEntry = todasEntradas.find(function(e){ return e.day === dia && desdePad < e.to && e.from < hastaPad; });
+        errors.push({ row: rowNum, msg: 'Franja ' + desdePad + '–' + hastaPad + ' en ' + dia + ' se solapa con ' + confEntry.project + ' (' + confEntry.from + '–' + confEntry.to + ').' });
+        return;
+      }
       valid.push({ id: colabNextId++, project: proyecto, day: dia, from: desdePad, to: hastaPad, desc: desc });
     });
     if (valid.length) {
@@ -1131,10 +1212,27 @@ function doLogin(){
   var btn = document.getElementById('btn-login');
   btn.disabled=true; btn.textContent='Verificando...';
   setLoginErr('');
-  apiCall('/users', { search: email, limit: 30 })
+  var namePart = email.split('@')[0].replace(/[._\-]/g,' ');
+  var parts = namePart.trim().split(/\s+/);
+  apiCall('/users', { search: namePart, limit: 50 })
     .then(function(res){
       var users=(res&&res.users)?res.users:(Array.isArray(res)?res:[]);
+      // Intento 1: match por email exacto (si la API lo devuelve)
       var match=users.find(function(u){ return u.email&&u.email.toLowerCase()===email; });
+      // Intento 2: match por nombre derivado del email, verificando que esté en el segmento de colaboradores
+      if(!match && parts.length>=2){
+        var fn0=parts[0].normalize('NFD').replace(/[̀-ͯ]/g,'');
+        var ln0=parts[parts.length-1].normalize('NFD').replace(/[̀-ͯ]/g,'');
+        var byName=users.find(function(u){
+          var fn=(u.firstName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+          var ln=(u.lastName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+          return fn.includes(fn0)&&ln.includes(ln0);
+        });
+        if(byName){
+          var inSeg=!_allUsers.length||_allUsers.find(function(u){ return String(u.id)===String(byName.id); });
+          if(inSeg) match=byName;
+        }
+      }
       if(!match) throw new Error('No encontramos ningún usuario con ese email en Humand. Verificá que sea el email con el que accedés a la app.');
       var s={ id:match.id, employeeInternalId:match.employeeInternalId||null, firstName:match.firstName||'', lastName:match.lastName||'', email:match.email||email, expires:Date.now()+SESSION_TTL };
       localStorage.setItem(SESSION_KEY, JSON.stringify(s));
@@ -1156,7 +1254,7 @@ function applySession(s){
   currentUser={ id:s.id, employeeInternalId:s.employeeInternalId, firstName:s.firstName, lastName:s.lastName, email:s.email };
   document.getElementById('av').textContent=initials(s.firstName,s.lastName);
   document.getElementById('av-name').textContent=s.firstName+' '+s.lastName;
-  document.getElementById('topbar-logout').style.display='';
+  document.getElementById('topbar-logout').style.display='block';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('welcome-banner').style.display='block';
   document.getElementById('wb-name').textContent='Hola, '+s.firstName+'!';
@@ -1164,6 +1262,7 @@ function applySession(s){
   document.querySelector('.user-selector-card h2').textContent='Seleccioná tu supervisor';
   document.querySelector('.user-selector-card p').textContent='Elegí al supervisor al que va dirigida tu solicitud de horas.';
   document.getElementById('btn-seleccionar').textContent='Continuar';
+  renderMisEnvios();
 }
 
 function seleccionarDesdeSession(){

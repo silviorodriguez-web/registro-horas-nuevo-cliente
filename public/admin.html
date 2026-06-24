@@ -760,13 +760,23 @@ function toggleArchived(){
   renderReqList();
 }
 
+function submissionSummary(r){
+  var parts = [];
+  if(r.totalHoras) parts.push(r.totalHoras+' hs');
+  if(r.entries && r.entries.length){
+    var projs = r.entries.reduce(function(acc,e){ if(e.project&&acc.indexOf(e.project)<0) acc.push(e.project); return acc; },[]);
+    if(projs.length) parts.push('Proyectos: '+projs.join(', '));
+  }
+  return parts.length ? ' ('+parts.join(' · ')+')' : '';
+}
+
 function notifyWallDeletedPending(r, comment){
   if(r.status !== 'pending') return;
   var eid = r.employeeInternalId ? String(r.employeeInternalId) : null;
   if(!eid) return;
   var supName = (selectedSupervisor && selectedSupervisor.name) ? selectedSupervisor.name : (r.supervisorName || 'tu supervisor/a');
   var obs = (comment || '').trim();
-  var body = 'Hola '+r.employeeName+', tu solicitud de registro de horas del período '+r.periodo+' fue eliminada por '+supName+' sin ser procesada.';
+  var body = 'Hola '+r.employeeName+', tu solicitud de registro de horas del período '+r.periodo+submissionSummary(r)+' fue eliminada por '+supName+' sin ser procesada.';
   if(obs) body += ' Observación: "'+obs+'".';
   body += ' Si tenés alguna consulta, comunicate directamente con '+supName+'.';
   apiCall('/posts', null, 'POST', {
@@ -780,7 +790,7 @@ function notifyWallApproved(r, eid){
   if(!eid) return;
   var supName = (selectedSupervisor && selectedSupervisor.name) ? selectedSupervisor.name : (r.approvedBy || 'tu supervisor/a');
   var obs = (r.comment || '').trim();
-  var body = 'Hola '+r.employeeName+', tu registro de horas del período '+r.periodo+' fue aprobado por '+supName+'. Tus horas ya fueron registradas en el sistema.';
+  var body = 'Hola '+r.employeeName+', tu registro de horas del período '+r.periodo+submissionSummary(r)+' fue aprobado por '+supName+'. Tus horas ya fueron registradas en el sistema.';
   if(obs) body += ' Observación: "'+obs+'".';
   apiCall('/posts', null, 'POST', {
     body: body,
@@ -889,20 +899,31 @@ function applyAdminSession(s){
   var ini=((s.firstName||'').charAt(0)+(s.lastName||'').charAt(0)).toUpperCase();
   document.getElementById('av-admin').textContent=ini;
   document.getElementById('av-admin-name').textContent=s.firstName+' '+s.lastName;
-  document.getElementById('topbar-logout').style.display='';
+  document.getElementById('topbar-logout').style.display='block';
   document.getElementById('login-screen').style.display='none';
   _pendingAdminSession=s;
 }
+
+function normStr(s){ return (s||'').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g,''); }
 
 function tryAutoSelectSupervisor(){
   if(!_pendingAdminSession) return;
   var s=_pendingAdminSession;
   var sel=document.getElementById('sel-supervisor');
-  var targetName=(s.firstName+' '+s.lastName).toLowerCase().trim();
+  var targetName=normStr(s.firstName+' '+s.lastName);
   var match=null;
   for(var i=0;i<sel.options.length;i++){
-    var oname=(sel.options[i].getAttribute('data-name')||'').toLowerCase().trim();
+    var oname=normStr(sel.options[i].getAttribute('data-name'));
     if(oname===targetName){ match=sel.options[i]; break; }
+  }
+  // Fallback: match parcial por apellido
+  if(!match){
+    var parts=targetName.split(/\s+/);
+    var lastName=parts[parts.length-1];
+    for(var j=0;j<sel.options.length;j++){
+      var on=normStr(sel.options[j].getAttribute('data-name'));
+      if(on.includes(lastName)){ match=sel.options[j]; break; }
+    }
   }
   if(match){
     sel.value=match.value;
