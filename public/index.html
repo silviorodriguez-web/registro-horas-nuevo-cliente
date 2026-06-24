@@ -683,9 +683,19 @@ function nowTimeStr(){
 // ── VALIDACIONES DE NEGOCIO ──
 var GRACE_DAYS_LIQUIDACION = 3;
 
+function timeToMin(t) {
+  var p = (t || '').split(':');
+  var h = parseInt(p[0], 10), m = parseInt(p[1], 10);
+  if (isNaN(h) || isNaN(m)) return -1;
+  return h * 60 + m;
+}
 function hasTimeOverlap(entries, day, from, to) {
+  var fMin = timeToMin(from), tMin = timeToMin(to);
+  if (fMin < 0 || tMin < 0 || fMin >= tMin) return false;
   return entries.some(function(e) {
-    return e.day === day && from < e.to && e.from < to;
+    if (e.day !== day) return false;
+    var efMin = timeToMin(e.from), etMin = timeToMin(e.to);
+    return fMin < etMin && efMin < tMin;
   });
 }
 
@@ -745,7 +755,7 @@ function addEntry(){
     return;
   }
   if (hasTimeOverlap(colabEntries, d, f, t)) {
-    var conf = colabEntries.find(function(e){ return e.day === d && f < e.to && e.from < t; });
+    var fMin2=timeToMin(f),tMin2=timeToMin(t); var conf = colabEntries.find(function(e){ return e.day === d && fMin2 < timeToMin(e.to) && timeToMin(e.from) < tMin2; });
     showEntryError('⚠ Franja horaria ocupada: ya hay una entrada el ' + d + ' de ' + conf.from + ' a ' + conf.to + ' (' + conf.project + '). Las franjas no pueden superponerse.');
     return;
   }
@@ -1069,7 +1079,7 @@ function handleCSVImport(input) {
       }
       var todasEntradas = colabEntries.concat(valid);
       if (hasTimeOverlap(todasEntradas, dia, desdePad, hastaPad)) {
-        var confEntry = todasEntradas.find(function(e){ return e.day === dia && desdePad < e.to && e.from < hastaPad; });
+        var dMin=timeToMin(desdePad),hMin=timeToMin(hastaPad); var confEntry = todasEntradas.find(function(e){ return e.day === dia && dMin < timeToMin(e.to) && timeToMin(e.from) < hMin; });
         errors.push({ row: rowNum, msg: 'Franja ' + desdePad + '–' + hastaPad + ' en ' + dia + ' se solapa con ' + confEntry.project + ' (' + confEntry.from + '–' + confEntry.to + ').' });
         return;
       }
