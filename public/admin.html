@@ -268,6 +268,10 @@ function calcH(f,t){
   return Math.max(0,Math.round(((th*60+tm-fh*60-fm)/60)*10)/10);
 }
 function totalH(ents){ return Math.round(ents.reduce(function(s,e){return s+calcH(e.from,e.to);},0)*10)/10; }
+function calcMin(f,t){ var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1]; return Math.max(0,th*60+tm-fh*60-fm); }
+function totalMin(ents){ return ents.reduce(function(s,e){return s+calcMin(e.from,e.to);},0); }
+function fmtMin(m){ var h=Math.floor(m/60),min=m%60; return min===0?h+' hs':h+' hs '+min+' min'; }
+function fmtH(decH){ return fmtMin(Math.round(decH*60)); }
 function uniqueP(ents){ return new Set(ents.map(function(e){return e.project;})).size; }
 function statusLabel(s){ return {pending:'Pendiente',approved:'Aprobado'}[s]||s; }
 function statusClass(s){ return {pending:'bp',approved:'ba'}[s]||'bp'; }
@@ -452,7 +456,7 @@ function renderReqList(){
       '<div class="req-name">'+r.employeeName+(r.modified?'<span class="mod-dot"></span>':'')+'</div>' +
       '<div class="req-meta">'+r.periodo+dateLabel+(r.originalSupervisorName?'<span style="display:inline-block;margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 5px">sup. original: '+r.originalSupervisorName+'</span>':'')+'</div>' +
       '<div class="req-footer">' +
-        '<span style="font-size:12px;font-weight:600;color:var(--brand-d)">'+totalH(r.entries)+' hs</span>' +
+        '<span style="font-size:12px;font-weight:600;color:var(--brand-d)">'+fmtMin(totalMin(r.entries))+'</span>' +
         '<div style="display:flex;align-items:center;gap:6px">' +
           '<span class="badge '+statusClass(r.status)+'">'+statusLabel(r.status)+'</span>' +
           (!r.archived
@@ -476,7 +480,7 @@ function renderDetail(){
   document.getElementById('det-panel').style.display='block';
   document.getElementById('dp-name').textContent  = r.employeeName;
   var dateStr = r.submittedAt ? ' · cargado '+fmtDate(r.submittedAt) : '';
-  document.getElementById('dp-sub').textContent   = r.periodo+' · '+r.totalHoras+' hs'+dateStr;
+  document.getElementById('dp-sub').textContent   = r.periodo+' · '+fmtH(r.totalHoras)+dateStr;
   document.getElementById('dp-badge').className   = 'badge '+statusClass(r.status);
   document.getElementById('dp-badge').textContent = statusLabel(r.status);
   document.getElementById('btn-appr').style.display = ro?'none':'';
@@ -518,7 +522,7 @@ function renderEntriesTable(r, ro){
         '<td><input type="date" class="cell-inp" id="ed-'+e.id+'" value="'+e.day+'" style="border-right:1px solid var(--border)"></td>' +
         '<td><input type="time" class="cell-time" id="ef-'+e.id+'" value="'+e.from+'" oninput="rfH('+e.id+')"></td>' +
         '<td><input type="time" class="cell-time" id="et-'+e.id+'" value="'+e.to+'"   oninput="rfH('+e.id+')"></td>' +
-        '<td><div class="cell-v hrs" id="eh-'+e.id+'">'+h+' hs</div></td>' +
+        '<td><div class="cell-v hrs" id="eh-'+e.id+'">'+fmtMin(calcMin(e.from,e.to))+'</div></td>' +
         '<td><div class="row-acts">' +
           '<button class="btn-icon save-ok" title="Guardar" onclick="saveRow('+r.id+','+e.id+')">✓</button>' +
           '<button class="btn-icon del"     title="Cancelar" onclick="cancelEdit('+e.id+')">✕</button>' +
@@ -529,7 +533,7 @@ function renderEntriesTable(r, ro){
       '<td><div class="cell-v muted">'+fmtDay(e.day)+'</div></td>' +
       '<td><div class="cell-v">'+e.from+'</div></td>' +
       '<td><div class="cell-v">'+e.to+'</div></td>' +
-      '<td><div class="cell-v hrs">'+h+' hs</div></td>' +
+      '<td><div class="cell-v hrs">'+fmtMin(calcMin(e.from,e.to))+'</div></td>' +
       '<td><div class="row-acts">'+(ro
         ? '<span style="font-size:11px;color:var(--muted)">—</span>'
         : '<button class="btn-icon edit" title="Editar"   onclick="editRow('+r.id+','+e.id+')">✎</button>' +
@@ -540,7 +544,7 @@ function renderEntriesTable(r, ro){
 
 function rfH(eid){
   var f=document.getElementById('ef-'+eid),t=document.getElementById('et-'+eid),h=document.getElementById('eh-'+eid);
-  if(f&&t&&h) h.textContent=calcH(f.value,t.value)+' hs';
+  if(f&&t&&h) h.textContent=fmtMin(calcMin(f.value,t.value));
 }
 function editRow(rid,eid){ editingRows[eid]=true; checkDirty(); renderEntriesTable(requests.find(function(x){return x.id===rid;}),false); }
 function cancelEdit(eid){ delete editingRows[eid]; checkDirty(); renderEntriesTable(requests.find(function(x){return x.id===selectedId;}),false); }
@@ -575,7 +579,7 @@ function checkDirty(){
   document.getElementById('dp-dirty').style.display=Object.keys(editingRows).length?'block':'none';
 }
 function updateTotals(r){
-  document.getElementById('dp-h').textContent=totalH(r.entries)+' hs';
+  document.getElementById('dp-h').textContent=fmtMin(totalMin(r.entries));
   document.getElementById('dp-e').textContent=r.entries.length;
   document.getElementById('dp-p').textContent=uniqueP(r.entries);
 }
@@ -762,7 +766,7 @@ function toggleArchived(){
 
 function submissionSummary(r){
   var parts = [];
-  if(r.totalHoras) parts.push(r.totalHoras+' hs');
+  if(r.totalHoras) parts.push(fmtH(r.totalHoras));
   if(r.entries && r.entries.length){
     var projs = r.entries.reduce(function(acc,e){ if(e.project&&acc.indexOf(e.project)<0) acc.push(e.project); return acc; },[]);
     if(projs.length) parts.push('Proyectos: '+projs.join(', '));

@@ -395,6 +395,10 @@ function calcH(f,t){
   return Math.max(0,Math.round(((th*60+tm-fh*60-fm)/60)*10)/10);
 }
 function totalH(entries){ return Math.round(entries.reduce(function(s,e){return s+calcH(e.from,e.to);},0)*10)/10; }
+function calcMin(f,t){ var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1]; return Math.max(0,th*60+tm-fh*60-fm); }
+function totalMin(entries){ return entries.reduce(function(s,e){return s+calcMin(e.from,e.to);},0); }
+function fmtMin(m){ var h=Math.floor(m/60),min=m%60; return min===0?h+' hs':h+' hs '+min+' min'; }
+function fmtH(decH){ return fmtMin(Math.round(decH*60)); }
 function uniqueP(entries){ return new Set(entries.map(function(e){return e.project;})).size; }
 function statusLabel(s){ return {pending:'Pendiente',approved:'Aprobado',returned:'Devuelto'}[s]||s; }
 function statusClass(s){ return {pending:'bp',approved:'ba',returned:'br'}[s]||'bp'; }
@@ -653,7 +657,7 @@ function renderMisEnvios(){
         return '<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">' +
           '<div style="flex:1">' +
             '<div style="font-weight:600;font-size:13px">'+s.periodo+'</div>' +
-            '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+s.totalHoras+' hs · '+
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+fmtH(s.totalHoras)+' · '+
               new Date(s.submittedAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+'</div>'+
             buildProyectosResumen(s.entries)+
             ret+
@@ -779,13 +783,13 @@ function renderColabList(){
       return '<div class="entry-item">' +
         '<div><div class="ep">' + e.project + '</div><div class="em">' + e.day + (e.desc?' · '+e.desc:'') + '</div></div>' +
         '<div class="et">' + e.from + ' → ' + e.to + '</div>' +
-        '<div class="eh">' + calcH(e.from,e.to) + ' hs</div>' +
+        '<div class="eh">' + fmtMin(calcMin(e.from,e.to)) + '</div>' +
         '<span class="badge bp">Borrador</span>' +
         '<button class="btn-icon del" onclick="removeEntry(' + e.id + ')">✕</button>' +
         '</div>';
     }).join('');
   }
-  document.getElementById('c-tot-h').textContent = totalH(colabEntries) + ' hs';
+  document.getElementById('c-tot-h').textContent = fmtMin(totalMin(colabEntries));
   document.getElementById('c-tot-e').textContent = colabEntries.length;
   document.getElementById('c-tot-p').textContent = uniqueP(colabEntries);
 }
@@ -853,7 +857,7 @@ function submitWeek(){
 
       // Actualizar UI
       document.getElementById('t-title').textContent   = periodo + ' · ' + nombre;
-      document.getElementById('t-total').textContent   = tot + ' hs';
+      document.getElementById('t-total').textContent   = fmtMin(totalMin(colabEntries));
       document.getElementById('t-date').textContent    = nowStr();
       document.getElementById('t-entries').textContent = colabEntries.length + ' entradas';
       document.getElementById('t-id').textContent      = 'FILE ID: ' + fileId;
@@ -912,7 +916,7 @@ function generatePDFBlob(submission){
     var h = calcH(e.from,e.to);
     var dayLabel = e.day;
     try { dayLabel = new Date(e.day+'T12:00:00').toLocaleDateString('es-AR',{weekday:'short',day:'numeric',month:'short'}); } catch(er){}
-    return [e.project, dayLabel, e.from, e.to, h+' hs'];
+    return [e.project, dayLabel, e.from, e.to, fmtMin(calcMin(e.from,e.to))];
   });
 
   doc.autoTable({
