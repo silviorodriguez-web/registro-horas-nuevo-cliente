@@ -256,16 +256,10 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
             <label>Proyecto *</label>
             <select id="c-prj">
               <option value="">Seleccionar proyecto...</option>
-              <option>AFISA</option>
-              <option>Centro de Contacto</option>
-              <option>DINAVI</option>
-              <option>Isla de Flores</option>
-              <option>MEVIR</option>
-              <option>Promociones</option>
-              <option>Recupero BROU</option>
-              <option>UPLA</option>
-              <option>Cobranza Consumo</option>
-              <option>Experiencia al cliente</option>
+              <!-- REEMPLAZAR con los proyectos del cliente -->
+              <option>Proyecto A</option>
+              <option>Proyecto B</option>
+              <option>Proyecto C</option>
             </select>
           </div>
           <div class="fg">
@@ -362,15 +356,18 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 <script>
 // ── CONSTANTES ──
 var PROXY     = '/api/humand';
-var FOLDER_ID = 1359526;
-var PROJECTS  = ['AFISA','Centro de Contacto','DINAVI','Isla de Flores','MEVIR','Promociones','Recupero BROU','UPLA','Cobranza Consumo','Experiencia al cliente'];
-var LS_KEY    = 'humand-horas-v5';
+var FOLDER_ID = 0; // REEMPLAZAR con el ID de la carpeta en Humand Files del cliente
+var PROJECTS  = [
+  // REEMPLAZAR con los proyectos del cliente
+  'Proyecto A',
+  'Proyecto B',
+  'Proyecto C',
+];
+var LS_KEY    = 'humand-horas-cliente';
 // Aprobadores alternativos: cuando el supervisor principal está de vacaciones
+// Completar con los supervisores y backups del cliente
 var BACKUP_DATA = [
-  { supervisorName: 'Sibele Troitiño',        backupName: 'Selena González' },
-  { supervisorName: 'Fabiana Lascano',         backupName: 'Cáceres Texeira Juan Martín' },
-  { supervisorName: 'Selena González',         backupName: 'Paula Bentancur Perdomo' },
-  { supervisorName: 'Paula Bentancur Perdomo', backupName: 'Selena González' },
+  // { supervisorName: 'Nombre Supervisor', backupName: 'Nombre Backup' },
 ];
 var SUPERVISOR_BACKUPS = {}; // { supervisorId: { id, name } } — se construye al cargar supervisores
 function normName(n){ return n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
@@ -416,7 +413,7 @@ function apiCall(path, params, method, body){
 }
 
 // ── CARGAR USUARIOS Y SUPERVISORES ──
-var SEGMENTATION_ITEM_ID = 1499762;
+var SEGMENTATION_ITEM_ID = 0; // REEMPLAZAR con el ID del item de segmentación de colaboradores del cliente
 
 function checkConfirmarBtn(){
   var selSup = document.getElementById('sel-supervisor-colab');
@@ -1122,8 +1119,8 @@ function descargarPlantillaCSV() {
   var today = todayStr();
   var header = 'proyecto,dia,desde,hasta,descripcion';
   var rows = [
-    'AFISA,' + today + ',09:00,17:00,Ejemplo de descripción',
-    'MEVIR,' + today + ',14:00,18:00,Reunión de equipo',
+    'Proyecto A,' + today + ',09:00,17:00,Ejemplo de descripción',
+    'Proyecto B,' + today + ',14:00,18:00,Reunión de equipo',
   ];
   var csv = [header].concat(rows).join('\n');
   var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM para que Excel lo abra bien

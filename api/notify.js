@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         <p style="margin:0 0 12px">Tu registro de horas del período <strong>${periodo}</strong> fue eliminado por <strong>${supervisorName}</strong>.</p>
         ${observacion}
         <p style="margin:0 0 24px">Por favor, volvé a cargar tus horas desde el sistema.</p>
-        <a href="https://registro-horas-pied.vercel.app" style="background:#3B5FBF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">Cargar mis horas →</a>
+        <a href="REEMPLAZAR_CON_URL_DEL_CLIENTE" style="background:#3B5FBF;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">Cargar mis horas →</a>
         <p style="margin:24px 0 0;font-size:11px;color:#6B7280">Este es un mensaje automático. No respondas este email.</p>
       </div>
     </div>
