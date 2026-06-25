@@ -250,14 +250,18 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 </div>
 
 <script>
-var PROXY    = '/api/humand';
-var PROJECTS = [
-  // REEMPLAZAR con los proyectos del cliente
-  'Proyecto A',
-  'Proyecto B',
-  'Proyecto C',
-];
-var LS_KEY   = 'humand-horas-cliente';
+var PROXY  = '/api/humand';
+var LS_KEY = 'humand-horas-cliente';
+
+function buildAdminProjectsDatalist(){
+  var set = {};
+  requests.forEach(function(r){
+    (r.entries||[]).forEach(function(e){ if(e.project) set[e.project]=true; });
+  });
+  var dl = document.getElementById('admin-prj-list');
+  if(!dl) return;
+  dl.innerHTML = Object.keys(set).map(function(p){ return '<option value="'+p.replace(/"/g,'&quot;')+'">'; }).join('');
+}
 
 // ── ESTADO ──
 var requests          = [];
@@ -521,9 +525,7 @@ function renderEntriesTable(r, ro){
     var h = calcH(e.from,e.to);
     if(editingRows[e.id] && !ro){
       return '<tr class="editing-row" id="erow-'+e.id+'">' +
-        '<td><select class="cell-sel" id="ep-'+e.id+'">' +
-          PROJECTS.map(function(p){return '<option'+(p===e.project?' selected':'')+'>'+p+'</option>';}).join('') +
-        '</select></td>' +
+        '<td><input type="text" class="cell-inp" id="ep-'+e.id+'" value="'+e.project.replace(/"/g,'&quot;')+'" placeholder="Proyecto / Cliente" list="admin-prj-list" style="border-right:1px solid var(--border)"></td>' +
         '<td><input type="date" class="cell-inp" id="ed-'+e.id+'" value="'+e.day+'" style="border-right:1px solid var(--border)"></td>' +
         '<td><input type="time" class="cell-time" id="ef-'+e.id+'" value="'+e.from+'" oninput="rfH('+e.id+')"></td>' +
         '<td><input type="time" class="cell-time" id="et-'+e.id+'" value="'+e.to+'"   oninput="rfH('+e.id+')"></td>' +
@@ -955,6 +957,14 @@ if(_adminSession){
 }
 cargarSupervisores();
 recargar();
+
+function _afterRecargarOrig(){ }
+var _recargarOrigFn = recargar;
+recargar = function(){
+  _recargarOrigFn.apply(this, arguments);
+  setTimeout(buildAdminProjectsDatalist, 800);
+};
 </script>
+<datalist id="admin-prj-list"></datalist>
 </body>
 </html>

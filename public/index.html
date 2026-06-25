@@ -252,15 +252,15 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       </div>
       <div class="card-body">
         <div class="form-grid-3">
-          <div class="fg">
-            <label>Proyecto *</label>
-            <select id="c-prj">
-              <option value="">Seleccionar proyecto...</option>
-              <!-- REEMPLAZAR con los proyectos del cliente -->
-              <option>Proyecto A</option>
-              <option>Proyecto B</option>
-              <option>Proyecto C</option>
-            </select>
+          <div class="fg" style="position:relative">
+            <label>Proyecto / Cliente *</label>
+            <input type="text" id="c-prj" placeholder="Ej: Cliente ABC, Reunión interna..."
+              autocomplete="off"
+              oninput="filtrarProyectos(this.value)"
+              onfocus="abrirDropdownProyectos()"
+              onblur="cerrarDropdownProyectos()"
+              onkeydown="navDropdownProyectos(event)">
+            <div id="prj-dropdown" style="display:none;position:absolute;z-index:200;width:100%;background:#fff;border:1px solid #d1d5db;border-radius:6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.13);top:calc(100% + 3px);left:0"></div>
           </div>
           <div class="fg">
             <label>Desde *</label>
@@ -357,13 +357,8 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 // ── CONSTANTES ──
 var PROXY     = '/api/humand';
 var FOLDER_ID = 1559993;
-var PROJECTS  = [
-  // REEMPLAZAR con los proyectos del cliente
-  'Proyecto A',
-  'Proyecto B',
-  'Proyecto C',
-];
 var LS_KEY    = 'humand-horas-cliente';
+var LS_PROJECTS_KEY = 'humand-proyectos-cliente';
 // Aprobadores alternativos: cuando el supervisor principal está de vacaciones
 // Completar con los supervisores y backups del cliente
 var BACKUP_DATA = [
@@ -681,6 +676,104 @@ function nowTimeStr(){
   return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
 }
 
+// ── PROYECTOS: autocompletado dinámico ──
+function getProyectosGuardados(){
+  try{ return JSON.parse(localStorage.getItem(LS_PROJECTS_KEY)||'[]'); }catch(e){ return []; }
+}
+function saveProyecto(nombre){
+  var nombre = nombre.trim();
+  if(!nombre) return;
+  var list = getProyectosGuardados();
+  // Mover al frente si ya existe (más reciente primero)
+  list = list.filter(function(p){ return p.toLowerCase() !== nombre.toLowerCase(); });
+  list.unshift(nombre);
+  if(list.length > 50) list = list.slice(0, 50); // máximo 50 proyectos recordados
+  localStorage.setItem(LS_PROJECTS_KEY, JSON.stringify(list));
+}
+function getProyectosFromSubmissions(){
+  var subs = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+  var set = {};
+  subs.forEach(function(s){
+    (s.entries||[]).forEach(function(e){ if(e.project) set[e.project]=true; });
+  });
+  return Object.keys(set);
+}
+function getAllProyectosSugeridos(){
+  var guardados = getProyectosGuardados();
+  var fromSubs  = getProyectosFromSubmissions();
+  // Unir sin duplicados, guardados primero
+  var seen = {};
+  var result = [];
+  guardados.concat(fromSubs).forEach(function(p){
+    var key = p.toLowerCase();
+    if(!seen[key]){ seen[key]=true; result.push(p); }
+  });
+  return result;
+}
+
+function filtrarProyectos(q){
+  var dd = document.getElementById('prj-dropdown');
+  var all = getAllProyectosSugeridos();
+  var norm = (q||'').toLowerCase().trim();
+  var filtered = !norm ? all : all.filter(function(p){ return p.toLowerCase().includes(norm); });
+  renderDropdownProyectos(filtered, q);
+}
+function abrirDropdownProyectos(){
+  var all = getAllProyectosSugeridos();
+  var val = document.getElementById('c-prj').value;
+  var filtered = !val.trim() ? all : all.filter(function(p){ return p.toLowerCase().includes(val.toLowerCase()); });
+  renderDropdownProyectos(filtered, val);
+}
+function cerrarDropdownProyectos(){
+  setTimeout(function(){ document.getElementById('prj-dropdown').style.display='none'; }, 160);
+}
+function renderDropdownProyectos(filtered, q){
+  var dd = document.getElementById('prj-dropdown');
+  if(!filtered.length && !q.trim()){ dd.style.display='none'; return; }
+  var rows = filtered.slice(0,20).map(function(p){
+    return '<div class="prj-opt" style="padding:9px 12px;cursor:pointer;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px"'+
+      ' onmousedown="seleccionarProyecto(\''+p.replace(/'/g,"\\'")+'\')"'+
+      ' onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'\'">'+
+      '<span style="font-size:11px;color:#9ca3af">⏱</span>'+p+'</div>';
+  });
+  // Si lo que escribió no existe en la lista, ofrecer crearlo
+  var q2 = (q||'').trim();
+  var exactMatch = filtered.some(function(p){ return p.toLowerCase()===q2.toLowerCase(); });
+  if(q2 && !exactMatch){
+    rows.unshift('<div style="padding:9px 12px;cursor:pointer;font-size:13px;color:var(--brand-d);border-bottom:1px solid #f3f4f6;font-weight:600"'+
+      ' onmousedown="seleccionarProyecto(\''+q2.replace(/'/g,"\\'")+'\')"'+
+      ' onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'\'">'+
+      '+ Usar "'+q2+'"</div>');
+  }
+  if(!rows.length){ dd.style.display='none'; return; }
+  dd.innerHTML = rows.join('');
+  dd.style.display = 'block';
+}
+function seleccionarProyecto(nombre){
+  document.getElementById('c-prj').value = nombre;
+  document.getElementById('prj-dropdown').style.display = 'none';
+}
+function navDropdownProyectos(e){
+  var dd = document.getElementById('prj-dropdown');
+  var opts = dd.querySelectorAll('div');
+  var active = dd.querySelector('div.prj-focused');
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    var next = active ? active.nextSibling : opts[0];
+    if(active){ active.classList.remove('prj-focused'); active.style.background=''; }
+    if(next){ next.classList.add('prj-focused'); next.style.background='#eff6ff'; }
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    var prev = active ? active.previousSibling : opts[opts.length-1];
+    if(active){ active.classList.remove('prj-focused'); active.style.background=''; }
+    if(prev){ prev.classList.add('prj-focused'); prev.style.background='#eff6ff'; }
+  } else if(e.key==='Enter'){
+    if(active){ e.preventDefault(); var txt=active.textContent.replace(/^\+\s*Usar\s*"/,'').replace(/"$/,'').trim(); seleccionarProyecto(txt); }
+  } else if(e.key==='Escape'){
+    dd.style.display='none';
+  }
+}
+
 // ── VALIDACIONES DE NEGOCIO ──
 var GRACE_DAYS_LIQUIDACION = 3;
 
@@ -734,12 +827,12 @@ function clearEntryError() {
 
 function addEntry(){
   clearEntryError();
-  var p = document.getElementById('c-prj').value;
+  var p = (document.getElementById('c-prj').value||'').trim();
   var f = document.getElementById('c-from').value;
   var t = document.getElementById('c-to').value;
   var d = document.getElementById('c-day').value;
   var desc = document.getElementById('c-desc').value;
-  if (!p) { alert('Seleccioná un proyecto'); return; }
+  if (!p) { alert('Escribí el nombre del proyecto o cliente'); return; }
   if (!d) { alert('Seleccioná un día'); return; }
   if (d > todayStr()) { alert('No podés cargar horas para días futuros.\nSolo se permiten días de hoy o anteriores.'); return; }
   if (d === todayStr() && t > nowTimeStr()) {
@@ -760,6 +853,7 @@ function addEntry(){
     showEntryError('⚠ Franja horaria ocupada: ya hay una entrada el ' + d + ' de ' + conf.from + ' a ' + conf.to + ' (' + conf.project + '). Las franjas no pueden superponerse.');
     return;
   }
+  saveProyecto(p);
   colabEntries.push({id:colabNextId++, project:p, day:d, from:f, to:t, desc:desc});
   document.getElementById('c-prj').value  = '';
   document.getElementById('c-desc').value = '';
@@ -1050,8 +1144,8 @@ function handleCSVImport(input) {
       var hasta    = (vals[3] || '').trim();
       var desc     = (vals[4] || '').trim();
       if (!proyecto && !dia && !desde && !hasta) return; // fila vacía
-      if (!PROJECTS.includes(proyecto)) {
-        errors.push({ row: rowNum, msg: 'Proyecto "' + proyecto + '" no válido.' });
+      if (!proyecto) {
+        errors.push({ row: rowNum, msg: 'La columna "proyecto" está vacía.' });
         return;
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
@@ -1084,6 +1178,7 @@ function handleCSVImport(input) {
         errors.push({ row: rowNum, msg: 'Franja ' + desdePad + '–' + hastaPad + ' en ' + dia + ' se solapa con ' + confEntry.project + ' (' + confEntry.from + '–' + confEntry.to + ').' });
         return;
       }
+      saveProyecto(proyecto);
       valid.push({ id: colabNextId++, project: proyecto, day: dia, from: desdePad, to: hastaPad, desc: desc });
     });
     if (valid.length) {
@@ -1119,8 +1214,8 @@ function descargarPlantillaCSV() {
   var today = todayStr();
   var header = 'proyecto,dia,desde,hasta,descripcion';
   var rows = [
-    'Proyecto A,' + today + ',09:00,17:00,Ejemplo de descripción',
-    'Proyecto B,' + today + ',14:00,18:00,Reunión de equipo',
+    'Cliente ABC,' + today + ',09:00,13:00,Desarrollo módulo de reportes',
+    'Reunión interna,' + today + ',14:00,15:30,Planificación semanal',
   ];
   var csv = [header].concat(rows).join('\n');
   var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM para que Excel lo abra bien
