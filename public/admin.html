@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Supervisión de Horas — Humand</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -125,6 +126,30 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 .login-err { margin-top:12px; padding:10px 14px; background:var(--e-bg); color:var(--err); border-radius:8px; font-size:12px; line-height:1.5; display:none; }
 .logout-btn { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:6px; color:rgba(255,255,255,.8); font-size:12px; cursor:pointer; padding:5px 12px; font-family:'DM Sans',sans-serif; transition:.15s; display:none; }
 .logout-btn:hover { background:rgba(255,255,255,.2); }
+/* ADMIN TABS */
+.admin-tabs { display:flex; gap:2px; margin-bottom:20px; background:var(--card); border:1px solid var(--border); border-radius:var(--rl); overflow:hidden; box-shadow:var(--sh); padding:4px; width:fit-content; }
+.admin-tab { padding:8px 20px; font-size:13px; font-weight:600; border:none; background:transparent; color:var(--muted); cursor:pointer; font-family:'DM Sans',sans-serif; border-radius:var(--r); transition:.15s; }
+.admin-tab.active { color:var(--brand-d); background:var(--brand-l); }
+.admin-tab:hover:not(.active) { background:var(--bg); color:var(--text); }
+/* REPORTES */
+.rpt-filter-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:12px 16px; box-shadow:var(--sh); flex-wrap:wrap; }
+.rpt-filter-row label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+.rpt-totals { display:flex; gap:14px; flex-wrap:wrap; padding:12px 18px; background:var(--brand-l); border-radius:var(--r); margin-bottom:14px; border:1px solid var(--border); }
+.rpt-ti .rpt-tl { font-size:10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.rpt-ti .rpt-tv { font-size:20px; font-weight:600; color:var(--brand-d); font-variant-numeric:tabular-nums; }
+.rpt-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px; }
+.rpt-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); box-shadow:var(--sh); overflow:hidden; }
+.rpt-card-hd { padding:11px 16px; border-bottom:1px solid var(--border); font-size:12px; font-weight:600; color:var(--text); display:flex; align-items:baseline; gap:8px; }
+.rpt-card-body { padding:14px 16px; }
+.rpt-bar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.rpt-bar-lbl { font-size:11px; color:var(--text); min-width:100px; max-width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+.rpt-bar-wrap { flex:1; background:var(--bg); border-radius:4px; height:16px; overflow:hidden; }
+.rpt-bar-val { font-size:10px; font-weight:600; color:var(--muted); white-space:nowrap; min-width:54px; text-align:right; }
+.rpt-table { width:100%; border-collapse:collapse; font-size:12px; }
+.rpt-table th { text-align:left; font-size:10px; font-weight:600; color:var(--muted); padding:8px 12px; background:var(--brand-l); text-transform:uppercase; letter-spacing:.4px; }
+.rpt-table td { border-bottom:1px solid var(--border); padding:9px 12px; color:var(--text); }
+.rpt-table tr:last-child td { border-bottom:none; }
+.rpt-empty { text-align:center; padding:40px 20px; color:var(--muted); font-size:13px; }
 </style>
 </head>
 <body>
@@ -161,6 +186,13 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 </div>
 
 <div class="main">
+  <div class="admin-tabs">
+    <button class="admin-tab active" id="tab-solicitudes" onclick="showAdminTab('solicitudes')">Solicitudes</button>
+    <button class="admin-tab" id="tab-reportes" onclick="showAdminTab('reportes')">Reportes del equipo</button>
+    <button class="admin-tab" id="tab-proyectos" onclick="showAdminTab('proyectos')">Proyectos</button>
+  </div>
+
+  <div id="panel-solicitudes">
   <div class="page-hd">
     <h1>Revisión de horas</h1>
     <p>Revisá y editá si es necesario. Al aprobar se registra en Humand Time Tracking.</p>
@@ -217,12 +249,13 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
         <table class="entries-tbl" style="margin-top:8px">
           <thead>
             <tr>
-              <th style="width:30%">Proyecto</th>
-              <th style="width:14%">Día</th>
-              <th style="width:10%">Desde</th>
-              <th style="width:10%">Hasta</th>
-              <th style="width:9%">Horas</th>
-              <th style="width:27%">Acciones</th>
+              <th style="width:27%">Proyecto</th>
+              <th style="width:12%">Día</th>
+              <th style="width:9%">Desde</th>
+              <th style="width:9%">Hasta</th>
+              <th style="width:8%">Horas</th>
+              <th style="width:7%">Fact.</th>
+              <th style="width:28%">Acciones</th>
             </tr>
           </thead>
           <tbody id="entries-tbody"></tbody>
@@ -231,6 +264,8 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           <div class="ti"><div class="tl">Total horas</div><div class="tv" id="dp-h">—</div></div>
           <div class="ti" style="margin-left:14px"><div class="tl">Entradas</div><div class="tv" id="dp-e">—</div></div>
           <div class="ti" style="margin-left:14px"><div class="tl">Proyectos</div><div class="tv" id="dp-p">—</div></div>
+          <div class="ti" style="margin-left:14px"><div class="tl">Facturable</div><div class="tv" id="dp-f" style="color:var(--success)">—</div></div>
+          <div class="ti" style="margin-left:14px"><div class="tl">No fact.</div><div class="tv" id="dp-nf" style="color:var(--muted);font-size:16px">—</div></div>
         </div>
         <div class="feedback-area">
           <label>Comentario (opcional)</label>
@@ -247,6 +282,80 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       </div>
     </div>
   </div>
+  </div><!-- /panel-solicitudes -->
+
+  <div id="panel-reportes" style="display:none">
+    <div class="page-hd">
+      <h1>Reportes del equipo</h1>
+      <p>Análisis de horas por colaborador y proyecto. Incluye todas las solicitudes del supervisor seleccionado.</p>
+    </div>
+    <div class="rpt-filter-row">
+      <label>Período desde</label>
+      <input type="date" class="filter-inp" id="rpt-desde" onchange="renderReportes()">
+      <label>hasta</label>
+      <input type="date" class="filter-inp" id="rpt-hasta" onchange="renderReportes()">
+      <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtro</button>
+      <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669;margin-left:auto">⬇ Exportar Excel</button>
+    </div>
+    <div id="rpt-content"><div class="rpt-empty">Seleccioná un supervisor para ver los reportes de su equipo.</div></div>
+  </div><!-- /panel-reportes -->
+
+  <!-- ── PANEL PROYECTOS (P3) ── -->
+  <div id="panel-proyectos" style="display:none">
+    <div class="page-hd">
+      <h1>Gestión de Proyectos</h1>
+      <p>Creá proyectos con ID numérico, asigná empleados autorizados y configurá fechas de cierre.</p>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-hd">
+        Proyectos activos
+        <button class="btn btn-sm" onclick="abrirFormProyecto(null)" style="background:var(--brand);color:#fff;border-color:var(--brand)">+ Nuevo proyecto</button>
+      </div>
+      <!-- Formulario inline crear/editar -->
+      <div id="prj-form-wrap" style="display:none;padding:18px 20px;border-bottom:1px solid var(--border);background:#f8faff">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="fg">
+            <label>ID numérico *</label>
+            <input type="number" id="prj-f-id" placeholder="Ej: 1042" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+          <div class="fg">
+            <label>Nombre del proyecto *</label>
+            <input type="text" id="prj-f-name" placeholder="Ej: IMR - Desarrollo UI" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+          <div class="fg">
+            <label>Cliente</label>
+            <input type="text" id="prj-f-client" placeholder="Ej: IMR" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:12px;align-items:end">
+          <div class="fg">
+            <label>Facturable</label>
+            <select id="prj-f-bill" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+              <option value="true">Sí — Facturable</option>
+              <option value="false">No — No facturable</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Fecha de cierre</label>
+            <input type="date" id="prj-f-close" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+          <div class="fg">
+            <label>IDs de empleados autorizados (separados por coma)</label>
+            <input type="text" id="prj-f-emps" placeholder="Ej: 12345, 67890, 11111" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+            <span style="font-size:10px;color:var(--muted)">Dejar vacío = todos los colaboradores pueden cargar horas en este proyecto</span>
+          </div>
+        </div>
+        <div id="prj-form-err" style="display:none;margin-bottom:8px;font-size:12px;color:var(--err)"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" style="background:var(--brand);color:#fff;border-color:var(--brand)" onclick="guardarProyecto()">Guardar proyecto</button>
+          <button class="btn btn-sm" onclick="cerrarFormProyecto()">Cancelar</button>
+        </div>
+      </div>
+      <div id="prj-list-content" style="padding:14px 20px">
+        <div class="rpt-empty" style="padding:20px">Cargando proyectos...</div>
+      </div>
+    </div>
+  </div><!-- /panel-proyectos -->
 </div>
 
 <script>
@@ -276,9 +385,27 @@ function calcH(f,t){
   var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1];
   return Math.max(0,Math.round(((th*60+tm-fh*60-fm)/60)*10)/10);
 }
-function totalH(ents){ return Math.round(ents.reduce(function(s,e){return s+calcH(e.from,e.to);},0)*10)/10; }
+function totalH(ents){ return Math.round(ents.reduce(function(s,e){ return s+(e.hours!=null?e.hours:calcH(e.from||'0:0',e.to||'0:0')); },0)*10)/10; }
 function calcMin(f,t){ var fh=+f.split(':')[0],fm=+f.split(':')[1],th=+t.split(':')[0],tm=+t.split(':')[1]; return Math.max(0,th*60+tm-fh*60-fm); }
-function totalMin(ents){ return ents.reduce(function(s,e){return s+calcMin(e.from,e.to);},0); }
+function entryMin(e){ return e.hours!=null ? Math.round(e.hours*60) : calcMin(e.from||'0:0',e.to||'0:0'); }
+function totalMin(ents){ return ents.reduce(function(s,e){return s+entryMin(e);},0); }
+// Convertir entradas horas→rangos apilados desde las 09:00
+function synthesizeTimes(entries){
+  var byDay={};
+  entries.forEach(function(e){ if(!byDay[e.day]) byDay[e.day]=[]; byDay[e.day].push(e); });
+  var result=[];
+  Object.keys(byDay).sort().forEach(function(day){
+    var cursor=9*60;
+    byDay[day].forEach(function(e){
+      var mins=e.hours!=null?Math.round(e.hours*60):calcMin(e.from||'9:00',e.to||'17:00');
+      var from=String(Math.floor(cursor/60)).padStart(2,'0')+':'+String(cursor%60).padStart(2,'0');
+      cursor+=mins;
+      var to=String(Math.floor(cursor/60)).padStart(2,'0')+':'+String(cursor%60).padStart(2,'0');
+      result.push(Object.assign({},e,{from:from,to:to}));
+    });
+  });
+  return result;
+}
 function fmtMin(m){ var h=Math.floor(m/60),min=m%60; return min===0?h+' hs':h+' hs '+min+' min'; }
 function fmtH(decH){ return fmtMin(Math.round(decH*60)); }
 function uniqueP(ents){ return new Set(ents.map(function(e){return e.project;})).size; }
@@ -521,26 +648,35 @@ function renderDetail(){
 
 function renderEntriesTable(r, ro){
   var tbody = document.getElementById('entries-tbody');
+  var isHorasMode = r.entries.length > 0 && r.entries[0].from === null;
   tbody.innerHTML = r.entries.map(function(e){
-    var h = calcH(e.from,e.to);
+    var isBill = e.billable !== false;
+    // Para entradas en modo horas, sintetizar from/to para edición
+    var synth = (e.from===null && e.hours!=null) ? synthesizeTimes([e])[0] : e;
+    var fromVal = synth.from || '';
+    var toVal   = synth.to   || '';
     if(editingRows[e.id] && !ro){
       return '<tr class="editing-row" id="erow-'+e.id+'">' +
         '<td><input type="text" class="cell-inp" id="ep-'+e.id+'" value="'+e.project.replace(/"/g,'&quot;')+'" placeholder="Proyecto / Cliente" list="admin-prj-list" style="border-right:1px solid var(--border)"></td>' +
         '<td><input type="date" class="cell-inp" id="ed-'+e.id+'" value="'+e.day+'" style="border-right:1px solid var(--border)"></td>' +
-        '<td><input type="time" class="cell-time" id="ef-'+e.id+'" value="'+e.from+'" oninput="rfH('+e.id+')"></td>' +
-        '<td><input type="time" class="cell-time" id="et-'+e.id+'" value="'+e.to+'"   oninput="rfH('+e.id+')"></td>' +
-        '<td><div class="cell-v hrs" id="eh-'+e.id+'">'+fmtMin(calcMin(e.from,e.to))+'</div></td>' +
+        '<td><input type="time" class="cell-time" id="ef-'+e.id+'" value="'+fromVal+'" oninput="rfH('+e.id+')"></td>' +
+        '<td><input type="time" class="cell-time" id="et-'+e.id+'" value="'+toVal+'"   oninput="rfH('+e.id+')"></td>' +
+        '<td><div class="cell-v hrs" id="eh-'+e.id+'">'+fmtMin(entryMin(e))+'</div></td>' +
+        '<td style="text-align:center;padding:0 10px"><input type="checkbox" id="eb-'+e.id+'" '+(isBill?'checked':'')+' style="width:15px;height:15px;accent-color:var(--success);cursor:pointer" title="Facturable"></td>' +
         '<td><div class="row-acts">' +
           '<button class="btn-icon save-ok" title="Guardar" onclick="saveRow('+r.id+','+e.id+')">✓</button>' +
           '<button class="btn-icon del"     title="Cancelar" onclick="cancelEdit('+e.id+')">✕</button>' +
         '</div></td></tr>';
     }
+    var fromDisplay = e.from || (isHorasMode ? '<span style="font-size:10px;color:var(--muted)">—</span>' : '—');
+    var toDisplay   = e.to   || (isHorasMode ? '<span style="font-size:10px;color:var(--muted)">—</span>' : '—');
     return '<tr id="erow-'+e.id+'">' +
       '<td><div class="cell-v" style="font-size:12px">'+e.project+'</div></td>' +
       '<td><div class="cell-v muted">'+fmtDay(e.day)+'</div></td>' +
-      '<td><div class="cell-v">'+e.from+'</div></td>' +
-      '<td><div class="cell-v">'+e.to+'</div></td>' +
-      '<td><div class="cell-v hrs">'+fmtMin(calcMin(e.from,e.to))+'</div></td>' +
+      '<td><div class="cell-v">'+fromDisplay+'</div></td>' +
+      '<td><div class="cell-v">'+toDisplay+'</div></td>' +
+      '<td><div class="cell-v hrs">'+fmtMin(entryMin(e))+'</div></td>' +
+      '<td style="text-align:center"><div class="cell-v" style="font-size:12px;'+(isBill?'color:var(--success)':'color:var(--muted)')+'">'+( isBill ? 'Sí' : 'No' )+'</div></td>' +
       '<td><div class="row-acts">'+(ro
         ? '<span style="font-size:11px;color:var(--muted)">—</span>'
         : '<button class="btn-icon edit" title="Editar"   onclick="editRow('+r.id+','+e.id+')">✎</button>' +
@@ -561,9 +697,10 @@ function saveRow(rid,eid){
   var np=document.getElementById('ep-'+eid),nd=document.getElementById('ed-'+eid);
   var nf=document.getElementById('ef-'+eid),nt=document.getElementById('et-'+eid);
   if(np) e.project=np.value;
-  if(nd) e.day=nd.value; // YYYY-MM-DD
+  if(nd) e.day=nd.value;
   if(nf) e.from=nf.value;
   if(nt) e.to=nt.value;
+  var nb=document.getElementById('eb-'+eid); if(nb) e.billable=nb.checked;
   r.modified=true;
   saveSubmissions();
   saveSubmissionToKV(r);
@@ -586,9 +723,13 @@ function checkDirty(){
   document.getElementById('dp-dirty').style.display=Object.keys(editingRows).length?'block':'none';
 }
 function updateTotals(r){
+  var billMin = r.entries.reduce(function(s,e){ return s+(e.billable!==false?entryMin(e):0); },0);
+  var noBillMin = totalMin(r.entries) - billMin;
   document.getElementById('dp-h').textContent=fmtMin(totalMin(r.entries));
   document.getElementById('dp-e').textContent=r.entries.length;
   document.getElementById('dp-p').textContent=uniqueP(r.entries);
+  var fEl=document.getElementById('dp-f');   if(fEl)  fEl.textContent=fmtMin(billMin);
+  var nfEl=document.getElementById('dp-nf'); if(nfEl) nfEl.textContent=fmtMin(noBillMin);
 }
 
 // ── APROBAR → clockIn + clockOut por cada entrada ──
@@ -606,9 +747,15 @@ function approveReq(){
     return;
   }
 
+  // Si las entradas usan modo horas (sin from/to), sintetizar tiempos antes de procesar
+  var entriesParaAprobacion = r.entries;
+  if(r.entries.length > 0 && r.entries[0].from === null){
+    entriesParaAprobacion = synthesizeTimes(r.entries);
+  }
+
   // Verificar que ningún clockOut sea futuro — Humand no permite entradas futuras
   var ahora = Date.now();
-  var entradasFuturas = r.entries.filter(function(e){
+  var entradasFuturas = entriesParaAprobacion.filter(function(e){
     return new Date(e.day+'T'+e.to+':00').getTime() > ahora;
   });
   if(entradasFuturas.length){
@@ -649,8 +796,8 @@ function approveReq(){
   }
 
   function processEntry(eid, i){
-    if(i>=r.entries.length) return Promise.resolve();
-    var e=r.entries[i];
+    if(i>=entriesParaAprobacion.length) return Promise.resolve();
+    var e=entriesParaAprobacion[i];
     var baseComment = (e.project+(e.desc?' — '+e.desc:'')).substring(0,150);
     var commentIn   = baseComment;
     var commentOut  = (baseComment + ' | Aprobado por: ' + selectedSupervisor.name).substring(0,200);
@@ -864,6 +1011,333 @@ function closeDetail(){
   document.getElementById('det-panel').style.display='none';
   document.getElementById('det-empty').style.display='flex';
   renderReqList();
+}
+
+// ── ADMIN TABS ──
+function showAdminTab(tab){
+  document.getElementById('panel-solicitudes').style.display = tab==='solicitudes' ? '' : 'none';
+  document.getElementById('panel-reportes').style.display    = tab==='reportes'    ? '' : 'none';
+  document.getElementById('panel-proyectos').style.display   = tab==='proyectos'   ? '' : 'none';
+  document.getElementById('tab-solicitudes').classList.toggle('active', tab==='solicitudes');
+  document.getElementById('tab-reportes').classList.toggle('active',    tab==='reportes');
+  document.getElementById('tab-proyectos').classList.toggle('active',   tab==='proyectos');
+  if(tab==='reportes')  renderReportes();
+  if(tab==='proyectos') cargarListaProyectos();
+}
+
+// ── EXPORT EXCEL (P5) ──
+function exportExcel(){
+  var vis = filteredRequests();
+  if(!vis||!vis.length){ alert('No hay datos para exportar. Seleccioná un supervisor primero.'); return; }
+  var desde = document.getElementById('rpt-desde').value;
+  var hasta  = document.getElementById('rpt-hasta').value;
+  var filtered = vis.slice();
+  if(desde) filtered = filtered.filter(function(r){ return (r.periodoHasta||'') >= desde; });
+  if(hasta)  filtered = filtered.filter(function(r){ return (r.periodoDesde||'') <= hasta; });
+  if(!filtered.length){ alert('Sin datos para el período seleccionado.'); return; }
+
+  // Hoja 1: Detalle completo
+  var detalleRows = [['Colaborador','Email','Período','Fecha Envío','Proyecto','Día','Horas','Facturable','Estado','Aprobado por']];
+  filtered.forEach(function(r){
+    (r.entries||[]).forEach(function(e){
+      detalleRows.push([
+        r.employeeName,
+        r.employeeEmail||'',
+        r.periodo,
+        r.submittedAt ? r.submittedAt.slice(0,10) : '',
+        e.project,
+        e.day,
+        e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100,
+        e.billable!==false ? 'Sí' : 'No',
+        r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
+        r.approvedBy||''
+      ]);
+    });
+  });
+
+  // Hoja 2: Resumen por proyecto
+  var byPrj = {};
+  filtered.forEach(function(r){
+    (r.entries||[]).forEach(function(e){
+      if(!byPrj[e.project]) byPrj[e.project]={total:0,fact:0,noFact:0,billable:e.billable!==false};
+      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+      byPrj[e.project].total += h;
+      if(e.billable!==false) byPrj[e.project].fact += h;
+      else byPrj[e.project].noFact += h;
+    });
+  });
+  var prjRows = [['Proyecto','Total Horas','Facturable','No Facturable','% Facturable','Facturación']];
+  Object.keys(byPrj).sort().forEach(function(p){
+    var d = byPrj[p];
+    var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
+    prjRows.push([p, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%', d.billable?'Facturable':'No facturable']);
+  });
+
+  // Hoja 3: Resumen por colaborador
+  var byEmp = {};
+  filtered.forEach(function(r){
+    if(!byEmp[r.employeeName]) byEmp[r.employeeName]={total:0,fact:0,noFact:0};
+    (r.entries||[]).forEach(function(e){
+      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+      byEmp[r.employeeName].total += h;
+      if(e.billable!==false) byEmp[r.employeeName].fact += h;
+      else byEmp[r.employeeName].noFact += h;
+    });
+  });
+  var empRows = [['Colaborador','Total Horas','Facturable','No Facturable','% Facturable']];
+  Object.keys(byEmp).sort().forEach(function(n){
+    var d = byEmp[n];
+    var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
+    empRows.push([n, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+  });
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalleRows), 'Detalle');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prjRows),     'Por Proyecto');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(empRows),     'Por Colaborador');
+  var sup = selectedSupervisor ? selectedSupervisor.name.replace(/[^a-z0-9]/gi,'_') : 'equipo';
+  var fileName = 'horas-'+sup+'-'+(desde||'todo')+'.xlsx';
+  XLSX.writeFile(wb, fileName);
+}
+
+// ── GESTIÓN DE PROYECTOS (P3) ──
+var _allProjects = [];
+var _editingPrjId = null;
+
+function cargarListaProyectos(){
+  fetch('/api/projects')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      _allProjects = Array.isArray(data)?data:[];
+      renderListaProyectos();
+    })
+    .catch(function(){ document.getElementById('prj-list-content').innerHTML='<div style="color:var(--err);font-size:13px">Error al cargar proyectos</div>'; });
+}
+
+function renderListaProyectos(){
+  var el = document.getElementById('prj-list-content');
+  if(!_allProjects.length){
+    el.innerHTML = '<div class="rpt-empty" style="padding:20px">Sin proyectos configurados. Creá el primero con el botón de arriba.</div>';
+    return;
+  }
+  var rows = _allProjects.map(function(p){
+    var statusBadge = p.status==='active'
+      ? '<span style="background:var(--s-bg);color:var(--success);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">Activo</span>'
+      : '<span style="background:var(--e-bg);color:var(--err);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600">Cerrado</span>';
+    var empCount = p.employees && p.employees.length ? p.employees.length+' empleados' : '<span style="color:var(--muted);font-size:11px">Todos los colaboradores</span>';
+    return '<tr>'+
+      '<td style="font-family:monospace;font-size:12px;color:var(--brand-d);font-weight:700">#'+p.id+'</td>'+
+      '<td style="font-weight:600">'+p.name+'</td>'+
+      '<td style="color:var(--muted)">'+( p.client||'—')+'</td>'+
+      '<td>'+(p.billable?'<span style="color:var(--success)">Sí</span>':'<span style="color:var(--muted)">No</span>')+'</td>'+
+      '<td>'+statusBadge+'</td>'+
+      '<td style="font-size:12px;color:var(--muted)">'+( p.closeDate||'—')+'</td>'+
+      '<td style="font-size:12px">'+empCount+'</td>'+
+      '<td>'+
+        '<button class="btn-icon edit" title="Editar" onclick="abrirFormProyecto('+p.id+')">✎</button>'+
+        (p.status==='active'
+          ? '<button class="btn-icon" style="font-size:11px;padding:3px 6px;border:1px solid var(--border-med);border-radius:5px;cursor:pointer;background:none" title="Cerrar proyecto" onclick="cerrarProyecto('+p.id+')">Cerrar</button>'
+          : '<button class="btn-icon" style="font-size:11px;padding:3px 6px;border:1px solid var(--border-med);border-radius:5px;cursor:pointer;background:none" title="Reactivar" onclick="reabrirProyecto('+p.id+')">Reabrir</button>')+
+        '<button class="btn-icon del" title="Eliminar" onclick="eliminarProyecto('+p.id+')">🗑</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
+    '<thead><tr style="border-bottom:2px solid var(--border)">'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">ID</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Nombre</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Cliente</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Facturable</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Estado</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Cierre</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Empleados</th>'+
+      '<th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Acciones</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function abrirFormProyecto(id){
+  _editingPrjId = id || null;
+  var p = id ? _allProjects.find(function(x){return x.id===id;}) : null;
+  document.getElementById('prj-f-id').value     = p ? p.id : '';
+  document.getElementById('prj-f-id').disabled  = !!p; // no cambiar ID de proyecto existente
+  document.getElementById('prj-f-name').value   = p ? p.name : '';
+  document.getElementById('prj-f-client').value = p ? (p.client||'') : '';
+  document.getElementById('prj-f-bill').value   = p ? String(p.billable!==false) : 'true';
+  document.getElementById('prj-f-close').value  = p ? (p.closeDate||'') : '';
+  document.getElementById('prj-f-emps').value   = p && p.employees && p.employees.length ? p.employees.join(', ') : '';
+  document.getElementById('prj-form-err').style.display = 'none';
+  document.getElementById('prj-form-wrap').style.display = 'block';
+  document.getElementById('prj-f-name').focus();
+}
+
+function cerrarFormProyecto(){
+  document.getElementById('prj-form-wrap').style.display='none';
+  _editingPrjId=null;
+}
+
+function guardarProyecto(){
+  var idVal   = document.getElementById('prj-f-id').value.trim();
+  var nameVal = document.getElementById('prj-f-name').value.trim();
+  var errEl   = document.getElementById('prj-form-err');
+  if(!nameVal){ errEl.textContent='El nombre del proyecto es requerido'; errEl.style.display='block'; return; }
+  if(!_editingPrjId && !idVal){ errEl.textContent='El ID numérico es requerido'; errEl.style.display='block'; return; }
+  var empsRaw = document.getElementById('prj-f-emps').value.trim();
+  var emps = empsRaw ? empsRaw.split(',').map(function(s){ return parseInt(s.trim()); }).filter(function(n){ return !isNaN(n); }) : [];
+  var body = {
+    name:      nameVal,
+    client:    document.getElementById('prj-f-client').value.trim(),
+    billable:  document.getElementById('prj-f-bill').value === 'true',
+    closeDate: document.getElementById('prj-f-close').value || null,
+    employees: emps
+  };
+  if(!_editingPrjId) body.id = Number(idVal);
+  var url    = _editingPrjId ? '/api/projects?id='+_editingPrjId : '/api/projects';
+  var method = _editingPrjId ? 'PATCH' : 'POST';
+  errEl.style.display='none';
+  fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data.error){ errEl.textContent=data.error; errEl.style.display='block'; return; }
+      cerrarFormProyecto();
+      cargarListaProyectos();
+    })
+    .catch(function(err){ errEl.textContent='Error al guardar: '+err.message; errEl.style.display='block'; });
+}
+
+function cerrarProyecto(id){
+  if(!confirm('¿Cerrar este proyecto? Los colaboradores no podrán cargar nuevas horas en él.')) return;
+  fetch('/api/projects?id='+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'closed'})})
+    .then(function(){ cargarListaProyectos(); })
+    .catch(function(err){ alert('Error: '+err.message); });
+}
+
+function reabrirProyecto(id){
+  fetch('/api/projects?id='+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'active',closeDate:null})})
+    .then(function(){ cargarListaProyectos(); })
+    .catch(function(err){ alert('Error: '+err.message); });
+}
+
+function eliminarProyecto(id){
+  var p = _allProjects.find(function(x){return x.id===id;});
+  if(!confirm('¿Eliminar definitivamente el proyecto "'+( p?p.name:id)+'"?\nEsta acción no se puede deshacer.')) return;
+  fetch('/api/projects?id='+id,{method:'DELETE'})
+    .then(function(){ cargarListaProyectos(); })
+    .catch(function(err){ alert('Error: '+err.message); });
+}
+
+function clearRptFilter(){
+  document.getElementById('rpt-desde').value='';
+  document.getElementById('rpt-hasta').value='';
+  renderReportes();
+}
+
+function renderReportes(){
+  var content = document.getElementById('rpt-content');
+  if(!content) return;
+  var vis = filteredRequests();
+  if(!vis){
+    content.innerHTML='<div class="rpt-empty">Seleccioná un supervisor para ver los reportes de su equipo.</div>';
+    return;
+  }
+  if(!vis.length){
+    content.innerHTML='<div class="rpt-empty">Sin solicitudes para mostrar en el período seleccionado.</div>';
+    return;
+  }
+  // Filtro de período adicional
+  var desde = document.getElementById('rpt-desde').value;
+  var hasta  = document.getElementById('rpt-hasta').value;
+  var filtered = vis.slice();
+  if(desde) filtered = filtered.filter(function(r){
+    return (r.periodoHasta || (r.submittedAt&&r.submittedAt.slice(0,10)) || '') >= desde;
+  });
+  if(hasta)  filtered = filtered.filter(function(r){
+    return (r.periodoDesde || (r.submittedAt&&r.submittedAt.slice(0,10)) || '') <= hasta;
+  });
+  if(!filtered.length){
+    content.innerHTML='<div class="rpt-empty">Sin datos para el período seleccionado.</div>';
+    return;
+  }
+  // Agregación
+  var byEmp={}, byPrj={};
+  var totMin=0, totBillMin=0;
+  filtered.forEach(function(r){
+    (r.entries||[]).forEach(function(e){
+      var m    = entryMin(e);
+      var bill = e.billable !== false;
+      totMin += m; if(bill) totBillMin += m;
+      if(!byEmp[r.employeeName]) byEmp[r.employeeName]={min:0,billMin:0};
+      byEmp[r.employeeName].min += m; if(bill) byEmp[r.employeeName].billMin += m;
+      if(!byPrj[e.project]) byPrj[e.project]={min:0,billMin:0,billable:bill};
+      byPrj[e.project].min += m; if(bill) byPrj[e.project].billMin += m;
+    });
+  });
+  var totNoBillMin = totMin - totBillMin;
+  var billPct = totMin > 0 ? Math.round(totBillMin/totMin*100) : 0;
+  var nEmp = Object.keys(byEmp).length;
+
+  var empArr = Object.keys(byEmp).map(function(n){ return {name:n,min:byEmp[n].min,billMin:byEmp[n].billMin}; }).sort(function(a,b){ return b.min-a.min; });
+  var prjArr = Object.keys(byPrj).map(function(p){ return {name:p,min:byPrj[p].min,billMin:byPrj[p].billMin}; }).sort(function(a,b){ return b.min-a.min; });
+  var maxEmpMin = empArr.length ? empArr[0].min : 1;
+  var maxPrjMin = prjArr.length ? prjArr[0].min : 1;
+
+  function barRows(arr, maxMin, color){
+    if(!arr.length) return '<div class="rpt-empty" style="padding:16px">Sin datos</div>';
+    return arr.slice(0,14).map(function(item){
+      var pct      = Math.max(3, Math.round(item.min/maxMin*100));
+      var billFrac = item.min > 0 ? item.billMin/item.min : 0;
+      var billW    = Math.round(billFrac*100);
+      var noBillW  = 100 - billW;
+      return '<div class="rpt-bar-row">'+
+        '<div class="rpt-bar-lbl" title="'+item.name+'">'+item.name+'</div>'+
+        '<div class="rpt-bar-wrap">'+
+          '<div style="width:'+pct+'%;height:100%;display:flex;border-radius:4px;overflow:hidden">'+
+            (billW>0  ? '<div style="width:'+billW+'%;height:100%;background:'+color+'"></div>' : '')+
+            (noBillW>0? '<div style="flex:1;height:100%;background:#d1d5db"></div>' : '')+
+          '</div>'+
+        '</div>'+
+        '<div class="rpt-bar-val">'+fmtMin(item.min)+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  var tableRows = empArr.map(function(e){
+    var noBill = e.min - e.billMin;
+    var pct    = e.min > 0 ? Math.round(e.billMin/e.min*100) : 0;
+    return '<tr>'+
+      '<td style="font-weight:600">'+e.name+'</td>'+
+      '<td>'+fmtMin(e.min)+'</td>'+
+      '<td style="color:var(--success)">'+fmtMin(e.billMin)+'</td>'+
+      '<td style="color:var(--muted)">'+fmtMin(noBill)+'</td>'+
+      '<td><span style="font-size:12px;font-weight:600;color:'+(pct>=80?'var(--success)':pct>=50?'var(--warn)':'var(--muted)')+'">'+pct+'%</span></td>'+
+    '</tr>';
+  }).join('');
+
+  content.innerHTML =
+    '<div class="rpt-totals">'+
+      '<div class="rpt-ti"><div class="rpt-tl">Total horas</div><div class="rpt-tv">'+fmtMin(totMin)+'</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">Facturable</div><div class="rpt-tv" style="color:var(--success)">'+fmtMin(totBillMin)+'</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">No facturable</div><div class="rpt-tv" style="color:var(--muted)">'+fmtMin(totNoBillMin)+'</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">% Facturable</div><div class="rpt-tv" style="color:var(--brand)">'+billPct+'%</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">Colaboradores</div><div class="rpt-tv">'+nEmp+'</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">Solicitudes</div><div class="rpt-tv">'+filtered.length+'</div></div>'+
+    '</div>'+
+    '<div class="rpt-grid2">'+
+      '<div class="rpt-card">'+
+        '<div class="rpt-card-hd">Horas por colaborador <span style="font-size:10px;font-weight:400;color:var(--muted)">azul = facturable · gris = no facturable</span></div>'+
+        '<div class="rpt-card-body">'+barRows(empArr, maxEmpMin, '#3B5FBF')+'</div>'+
+      '</div>'+
+      '<div class="rpt-card">'+
+        '<div class="rpt-card-hd">Horas por proyecto / cliente <span style="font-size:10px;font-weight:400;color:var(--muted)">verde = facturable · gris = no facturable</span></div>'+
+        '<div class="rpt-card-body">'+barRows(prjArr, maxPrjMin, '#059669')+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-hd">Resumen por colaborador</div>'+
+      '<div style="overflow-x:auto"><table class="rpt-table">'+
+        '<thead><tr><th>Colaborador</th><th>Total</th><th>Facturable</th><th>No facturable</th><th>% Fact.</th></tr></thead>'+
+        '<tbody>'+tableRows+'</tbody>'+
+      '</table></div>'+
+    '</div>';
 }
 
 // ── SESIÓN / LOGIN ADMIN ──
