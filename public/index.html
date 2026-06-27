@@ -197,7 +197,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 <div class="main">
   <div class="page-hd">
     <h1>Carga semanal de horas</h1>
-    <p>Seleccioná tu nombre, completá tus entradas y enviá para revisión del supervisor.</p>
+    <p>Completá tus entradas y enviá tus horas directamente a Humand Time Tracking.</p>
   </div>
 
   <!-- Bienvenida post-login -->
@@ -362,7 +362,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
         <button class="btn">Guardar borrador</button>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button id="btn-submit-direct" class="btn btn-direct" onclick="submitDirect()" title="Registra directamente en Humand Time Tracking sin pasar por aprobación del supervisor">⚡ Enviar directo a Humand</button>
-          <button class="btn btn-primary" onclick="submitWeek()">Enviar para revisión →</button>
+          <button class="btn btn-primary" onclick="submitWeek()" style="display:none">Enviar para revisión →</button>
         </div>
       </div>
     </div>
@@ -1712,16 +1712,17 @@ function setLoginErr(msg){
 function applySession(s){
   _sessionMode=true;
   currentUser={ id:s.id, employeeInternalId:s.employeeInternalId, firstName:s.firstName, lastName:s.lastName, email:s.email };
+  currentSupervisor={ id:'', name:'Directo', originalSupervisorName:null };
   document.getElementById('av').textContent=initials(s.firstName,s.lastName);
   document.getElementById('av-name').textContent=s.firstName+' '+s.lastName;
   document.getElementById('topbar-logout').style.display='block';
   document.getElementById('login-screen').style.display='none';
   document.getElementById('welcome-banner').style.display='block';
   document.getElementById('wb-name').textContent='Hola, '+s.firstName+'!';
-  document.getElementById('nombre-col').style.display='none';
-  document.querySelector('.user-selector-card h2').textContent='Seleccioná tu supervisor';
-  document.querySelector('.user-selector-card p').textContent='Elegí al supervisor al que va dirigida tu solicitud de horas.';
-  document.getElementById('btn-seleccionar').textContent='Continuar';
+  document.querySelector('.user-selector-card').style.display='none';
+  document.getElementById('panel-carga').style.display='block';
+  document.getElementById('panel-carga').scrollIntoView({behavior:'smooth',block:'start'});
+  cargarProyectosManaged();
   renderMisEnvios();
 }
 

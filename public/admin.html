@@ -361,6 +361,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 <script>
 var PROXY  = '/api/humand';
 var LS_KEY = 'humand-horas-cliente';
+var NOTIFY_WALL_ENABLED = false; // false = no envía mensajes al muro ni push notifications
 
 function buildAdminProjectsDatalist(){
   var set = {};
@@ -929,6 +930,7 @@ function submissionSummary(r){
 }
 
 function notifyWallDeletedPending(r, comment){
+  if(!NOTIFY_WALL_ENABLED) return;
   if(r.status !== 'pending') return;
   var eid = r.employeeInternalId ? String(r.employeeInternalId) : null;
   if(!eid) return;
@@ -945,6 +947,7 @@ function notifyWallDeletedPending(r, comment){
 }
 
 function notifyWallApproved(r, eid){
+  if(!NOTIFY_WALL_ENABLED) return;
   if(!eid) return;
   var supName = (selectedSupervisor && selectedSupervisor.name) ? selectedSupervisor.name : (r.approvedBy || 'tu supervisor/a');
   var obs = (r.comment || '').trim();
