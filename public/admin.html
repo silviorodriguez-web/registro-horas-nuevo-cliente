@@ -195,7 +195,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
   <div id="panel-solicitudes">
   <div class="page-hd">
     <h1>Revisión de horas</h1>
-    <p>Revisá y editá si es necesario. Al aprobar se registra en Humand Time Tracking.</p>
+    <p>Los colaboradores cargan sus horas directo a Humand y no requieren aprobación. Esta sección queda disponible para revisar o resolver solicitudes anteriores.</p>
   </div>
 
   <div class="sup-bar">
@@ -626,7 +626,7 @@ function renderReqList(){
   if(!vis.length){
     var msg = filterDate
       ? '<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin solicitudes para esa fecha.</div>'
-      : '<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin solicitudes pendientes de tu equipo.<br><span style="font-size:11px">Los colaboradores envían desde <a href="/" style="color:var(--brand)">la vista principal</a>.</span></div>';
+      : '<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin solicitudes pendientes de tu equipo.<br><span style="font-size:11px">Los colaboradores cargan sus horas directo a Humand, así que no se generan solicitudes nuevas para revisar.</span></div>';
     l.innerHTML = msg;
     document.getElementById('stat-p').textContent='0';
     document.getElementById('stat-a').textContent='0';
