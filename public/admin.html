@@ -1776,7 +1776,8 @@ function getAdminSession(){
 // No tira error si el segmento no existe o está vacío: devuelve [] (soft-fail),
 // para que la falta de un segmento no bloquee el chequeo del otro.
 function membersOfSegment(segmentationsData, nameIncludes){
-  var items = (segmentationsData && (segmentationsData.items||segmentationsData)) || [];
+  var raw = (segmentationsData && (segmentationsData.items||segmentationsData)) || [];
+  var items = Array.isArray(raw) ? raw : [];
   var seg = items.find(function(s){ return s.name && s.name.toLowerCase().includes(nameIncludes); });
   if(!seg) return Promise.resolve([]);
   var segItems = seg.segmentationItems || seg.items || [];
