@@ -301,7 +301,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       <label>Usuario</label>
       <input type="text" class="filter-inp" id="rpt-usuario" placeholder="Nombre o email..." oninput="renderReportes()" style="min-width:170px">
       <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtros</button>
-      <button class="btn btn-sm" onclick="exportPF()" style="font-size:11px;padding:4px 12px;background:#fff;color:var(--brand-d);border-color:var(--brand-d);margin-left:auto" title="Genera el CSV en el formato de nómina de IMR (PF_PlantillaRegTiempos)">⬇ Exportar formato nómina</button>
+      <button class="btn btn-sm" onclick="exportPF()" style="font-size:11px;padding:4px 12px;background:#fff;color:var(--brand-d);border-color:var(--brand-d);margin-left:auto" title="Genera un Excel en el formato de nómina de IMR (PF_PlantillaRegTiempos)">⬇ Exportar formato nómina (Excel)</button>
       <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669">⬇ Exportar Excel</button>
     </div>
     <div id="rpt-content"><div class="rpt-empty">Cargando reportes...</div></div>
@@ -1144,8 +1144,8 @@ function exportPF(){
     fetch('/api/legajos').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(legajos){
       legajos = legajos && typeof legajos==='object' ? legajos : {};
       var sinLegajo = {};
-      var header = 'T;NOMBRE_PERSONAL;*LEGAJO_PERSONAL;*FECHA;CLIENTE;NOMBRE CLIENTE;*CONTRATO-DIVISION;NOMBRE DIVISION;*CONTRATO-TIPO;NOMBRE TIPO;*CONTRATO-NUMERO;NOMBRE CONTRATO;*TAREA;NOMBRE TAREA;*TIEMPO;OBSERVACIONES;CATEGORIA';
-      var lines = [header];
+      var header = ['T','NOMBRE_PERSONAL','*LEGAJO_PERSONAL','*FECHA','CLIENTE','NOMBRE CLIENTE','*CONTRATO-DIVISION','NOMBRE DIVISION','*CONTRATO-TIPO','NOMBRE TIPO','*CONTRATO-NUMERO','NOMBRE CONTRATO','*TAREA','NOMBRE TAREA','*TIEMPO','OBSERVACIONES','CATEGORIA'];
+      var rows = [header];
 
       pairs.forEach(function(pair){
         var r = pair.r, e = pair.e;
@@ -1154,37 +1154,43 @@ function exportPF(){
         var legajo = legajos[email] || '';
         if(!legajo) sinLegajo[r.employeeName] = true;
         var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+        // Todos los valores como string: la plantilla del cliente pide explícitamente
+        // que las columnas numéricas (legajo, número de contrato) queden en formato TEXTO
+        // para no perder ceros a la izquierda ni que Excel las reinterprete.
         var row = [
           'D',
-          (r.employeeName||'').trim().replace(/\s+/g,'_'),
-          legajo,
-          fechaDDMMAAAA(e.day),
-          proj ? (proj.clientCode||'') : '',
-          proj ? (proj.client||'') : '',
-          proj ? (proj.division||'') : '',
+          String((r.employeeName||'').trim().replace(/\s+/g,'_')),
+          String(legajo),
+          String(fechaDDMMAAAA(e.day)),
+          String(proj ? (proj.clientCode||'') : ''),
+          String(proj ? (proj.client||'') : ''),
+          String(proj ? (proj.division||'') : ''),
           '',
-          proj ? (proj.contractType||'') : '',
+          String(proj ? (proj.contractType||'') : ''),
           '',
-          proj ? proj.id : (e.projectId||''),
-          e.project||'',
+          String(proj ? proj.id : (e.projectId||'')),
+          String(e.project||''),
           'HP',
           '',
-          decToHM(decHours),
-          e.desc||'',
+          String(decToHM(decHours)),
+          String(e.desc||''),
           ''
         ];
-        lines.push(row.map(function(v){ return String(v==null?'':v).replace(/;/g,','); }).join(';'));
+        rows.push(row);
       });
 
-      var csv = '﻿' + lines.join('\r\n');
-      var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
+      var ws = XLSX.utils.aoa_to_sheet(rows);
+      // Forzar tipo texto ('s') en todas las celdas para que Excel no reinterprete
+      // legajos, IDs de contrato o fechas como números/fechas nativas.
+      Object.keys(ws).forEach(function(cellRef){
+        if(cellRef[0] === '!') return;
+        var cell = ws[cellRef];
+        if(cell && cell.v != null){ cell.t = 's'; cell.v = String(cell.v); }
+      });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'RegTiempos');
       var desde = document.getElementById('rpt-desde').value;
-      a.download = 'PF_RegTiempos_'+(desde||'export')+'.csv';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      XLSX.writeFile(wb, 'PF_RegTiempos_'+(desde||'export')+'.xlsx');
 
       var faltantes = Object.keys(sinLegajo);
       if(faltantes.length){
