@@ -789,6 +789,7 @@ function filtrarProyectos(q){
   renderDropdownProyectos(filtered, q);
 }
 function abrirDropdownProyectos(){
+  if(document.getElementById('c-prj').readOnly) return;
   var all = getAllProyectosSugeridos();
   var val = document.getElementById('c-prj').value;
   var filtered = !val.trim() ? all : all.filter(function(p){ return p.toLowerCase().includes(val.toLowerCase()); });
@@ -960,6 +961,7 @@ function addEntry(){
   document.getElementById('c-prj').value  = '';
   document.getElementById('c-desc').value = '';
   _currentProjectId = null;
+  setProyectoLocked(false);
   renderColabList();
 }
 
@@ -1418,8 +1420,38 @@ function seleccionarProyectoAsignado(sel){
   _currentProjectId = id;
   var msg = document.getElementById('prj-access-msg');
   if(msg) msg.style.display='none';
+  setProyectoLocked(true);
   // reset el select para que quede como atajo, no como estado
   setTimeout(function(){ sel.value=''; }, 50);
+}
+
+// Bloquea/desbloquea el campo Proyecto/Cliente cuando se trajo el valor desde el desplegable
+function setProyectoLocked(locked){
+  var el = document.getElementById('c-prj');
+  if(!el) return;
+  el.readOnly = locked;
+  el.style.background = locked ? '#F3F4F6' : '';
+  el.style.color      = locked ? '#6B7280' : '';
+  el.style.cursor     = locked ? 'not-allowed' : '';
+  var btn = document.getElementById('c-prj-unlock-btn');
+  if(locked){
+    if(!btn){
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'c-prj-unlock-btn';
+      btn.textContent = '✕ Cambiar proyecto';
+      btn.style.cssText = 'margin-top:5px;font-size:11px;background:none;border:none;color:#3B5FBF;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;display:block';
+      btn.onclick = function(){
+        document.getElementById('c-prj').value = '';
+        _currentProjectId = null;
+        setProyectoLocked(false);
+        document.getElementById('c-prj').focus();
+      };
+      el.parentElement.appendChild(btn);
+    }
+  } else if(btn){
+    btn.remove();
+  }
 }
 
 // ── CARGA MASIVA CSV ──

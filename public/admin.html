@@ -286,18 +286,24 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 
   <div id="panel-reportes" style="display:none">
     <div class="page-hd">
-      <h1>Reportes del equipo</h1>
-      <p>Análisis de horas por colaborador y proyecto. Incluye todas las solicitudes del supervisor seleccionado.</p>
+      <h1>Reportería</h1>
+      <p>Histórico completo de horas cargadas por todos los equipos. Usá los filtros para acotar lo que querés ver o descargar.</p>
     </div>
     <div class="rpt-filter-row">
       <label>Período desde</label>
       <input type="date" class="filter-inp" id="rpt-desde" onchange="renderReportes()">
       <label>hasta</label>
       <input type="date" class="filter-inp" id="rpt-hasta" onchange="renderReportes()">
-      <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtro</button>
+      <label>Proyecto</label>
+      <select class="filter-inp" id="rpt-proyecto" onchange="renderReportes()"><option value="">Todos</option></select>
+      <label>Cliente</label>
+      <select class="filter-inp" id="rpt-cliente" onchange="renderReportes()"><option value="">Todos</option></select>
+      <label>Usuario</label>
+      <input type="text" class="filter-inp" id="rpt-usuario" placeholder="Nombre o email..." oninput="renderReportes()" style="min-width:170px">
+      <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtros</button>
       <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669;margin-left:auto">⬇ Exportar Excel</button>
     </div>
-    <div id="rpt-content"><div class="rpt-empty">Seleccioná un supervisor para ver los reportes de su equipo.</div></div>
+    <div id="rpt-content"><div class="rpt-empty">Cargando reportes...</div></div>
   </div><!-- /panel-reportes -->
 
   <!-- ── PANEL PROYECTOS (P3) ── -->
@@ -340,15 +346,15 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
             <input type="date" id="prj-f-close" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
           </div>
           <div class="fg">
-            <label>IDs de empleados autorizados (separados por coma)</label>
+            <label>Emails de empleados autorizados (Humand, separados por coma)</label>
             <div style="display:flex;gap:6px;align-items:center">
-              <input type="text" id="prj-f-emps" placeholder="Ej: 12345, 67890, 11111" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;flex:1;min-width:0">
+              <input type="text" id="prj-f-emps" placeholder="Ej: juan.perez@empresa.com, maria.gomez@empresa.com" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;flex:1;min-width:0">
               <button type="button" onclick="document.getElementById('prj-emps-file').click()"
                 style="padding:8px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--brand-d);white-space:nowrap;font-family:inherit;transition:.15s"
-                title="Importar DNIs desde planilla CSV o Excel">📋 Importar planilla</button>
+                title="Importar emails desde planilla CSV o Excel">📋 Importar planilla</button>
               <input type="file" id="prj-emps-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importarEmpleadosPlanilla(this)">
             </div>
-            <span style="font-size:10px;color:var(--muted)">Dejar vacío = todos los colaboradores pueden cargar horas en este proyecto. La planilla debe tener los DNIs en la primera columna.</span>
+            <span style="font-size:10px;color:var(--muted)">Dejar vacío = todos los colaboradores pueden cargar horas en este proyecto. La planilla debe tener el email de Humand en la primera columna. Al guardar, cada email se valida contra Humand.</span>
           </div>
         </div>
         <div id="prj-form-err" style="display:none;margin-bottom:8px;font-size:12px;color:var(--err)"></div>
@@ -570,6 +576,7 @@ function _afterRecargar(){
   document.getElementById('det-empty').style.display='flex';
   renderReqList();
   updateArchivedBtn();
+  if(document.getElementById('panel-reportes').style.display !== 'none') renderReportes();
 }
 
 // ── RENDER LISTA ──
@@ -1030,7 +1037,7 @@ function showAdminTab(tab){
   document.getElementById('tab-solicitudes').classList.toggle('active', tab==='solicitudes');
   document.getElementById('tab-reportes').classList.toggle('active',    tab==='reportes');
   document.getElementById('tab-proyectos').classList.toggle('active',   tab==='proyectos');
-  if(tab==='reportes')  renderReportes();
+  if(tab==='reportes')  ensureProjectsLoaded(function(){ renderReportesFiltersOptions(); renderReportes(); });
   if(tab==='proyectos') cargarListaProyectos();
 }
 
@@ -1043,60 +1050,42 @@ function decToHMS(dec){
 }
 
 function exportExcel(){
-  var vis = filteredRequests();
-  if(!vis||!vis.length){ alert('No hay datos para exportar. Seleccioná un supervisor primero.'); return; }
-  var desde = document.getElementById('rpt-desde').value;
-  var hasta  = document.getElementById('rpt-hasta').value;
-  var filtered = vis.slice();
-  if(desde) filtered = filtered.filter(function(r){ return (r.periodoHasta||'') >= desde; });
-  if(hasta)  filtered = filtered.filter(function(r){ return (r.periodoDesde||'') <= hasta; });
-  if(!filtered.length){ alert('Sin datos para el período seleccionado.'); return; }
+  var pairs = getFilteredEntryPairs();
+  if(!pairs.length){ alert('No hay datos para exportar con los filtros actuales.'); return; }
 
-  var projectsPromise = _allProjects.length
-    ? Promise.resolve(_allProjects)
-    : fetch('/api/projects').then(function(r){ return r.json(); }).then(function(d){ _allProjects = Array.isArray(d)?d:[]; return _allProjects; }).catch(function(){ return []; });
-
-  projectsPromise.then(function(projects){
-    function clientForProject(name){
-      var p = projects.find(function(x){ return x.name && x.name.trim()===name.trim(); });
-      return p ? (p.client||'') : '';
-    }
-
+  ensureProjectsLoaded(function(){
     // Hoja 1: Detalle completo — orden estilo Clockify
     var detalleRows = [['Client','Project','Description','User','Email','Billable','Date','Duration (h)','Duration (decimal)','Date of creation','Estado','Aprobado por','Sync Humand TT']];
-    filtered.forEach(function(r){
+    pairs.forEach(function(pair){
+      var r = pair.r, e = pair.e;
       var ttLabel = r.ttSynced===true ? 'Sí' : (r.ttSynced===false ? 'No' : 'N/A');
-      (r.entries||[]).forEach(function(e){
-        var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-        detalleRows.push([
-          clientForProject(e.project),
-          e.project,
-          e.desc||'',
-          r.employeeName,
-          r.employeeEmail||'',
-          e.billable!==false ? 'Yes' : 'No',
-          e.day,
-          decToHMS(decHours),
-          decHours,
-          r.submittedAt ? r.submittedAt.slice(0,10) : '',
-          r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
-          r.approvedBy||'',
-          ttLabel
-        ]);
-      });
+      var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+      detalleRows.push([
+        clienteDeProyecto(e.project),
+        e.project,
+        e.desc||'',
+        r.employeeName,
+        r.employeeEmail||'',
+        e.billable!==false ? 'Yes' : 'No',
+        e.day,
+        decToHMS(decHours),
+        decHours,
+        r.submittedAt ? r.submittedAt.slice(0,10) : '',
+        r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
+        r.approvedBy||'',
+        ttLabel
+      ]);
     });
 
     // Hoja 2: Resumen por proyecto
     var byPrj = {};
-    filtered.forEach(function(r){
-      (r.entries||[]).forEach(function(e){
-        var key = e.project;
-        if(!byPrj[key]) byPrj[key]={client:clientForProject(key),total:0,fact:0,noFact:0};
-        var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-        byPrj[key].total += h;
-        if(e.billable!==false) byPrj[key].fact += h;
-        else byPrj[key].noFact += h;
-      });
+    pairs.forEach(function(pair){
+      var e = pair.e, key = e.project;
+      if(!byPrj[key]) byPrj[key]={client:clienteDeProyecto(key),total:0,fact:0,noFact:0};
+      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+      byPrj[key].total += h;
+      if(e.billable!==false) byPrj[key].fact += h;
+      else byPrj[key].noFact += h;
     });
     var prjRows = [['Client','Project','Total Horas','Facturable','No Facturable','% Facturable']];
     Object.keys(byPrj).sort().forEach(function(p){
@@ -1107,14 +1096,13 @@ function exportExcel(){
 
     // Hoja 3: Resumen por colaborador
     var byEmp = {};
-    filtered.forEach(function(r){
+    pairs.forEach(function(pair){
+      var r = pair.r, e = pair.e;
       if(!byEmp[r.employeeName]) byEmp[r.employeeName]={email:r.employeeEmail||'',total:0,fact:0,noFact:0};
-      (r.entries||[]).forEach(function(e){
-        var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-        byEmp[r.employeeName].total += h;
-        if(e.billable!==false) byEmp[r.employeeName].fact += h;
-        else byEmp[r.employeeName].noFact += h;
-      });
+      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+      byEmp[r.employeeName].total += h;
+      if(e.billable!==false) byEmp[r.employeeName].fact += h;
+      else byEmp[r.employeeName].noFact += h;
     });
     var empRows = [['User','Email','Total Horas','Facturable','No Facturable','% Facturable']];
     Object.keys(byEmp).sort().forEach(function(n){
@@ -1127,8 +1115,8 @@ function exportExcel(){
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalleRows), 'Detailed Report');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prjRows),     'Por Proyecto');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(empRows),     'Por Colaborador');
-    var sup = selectedSupervisor ? selectedSupervisor.name.replace(/[^a-z0-9]/gi,'_') : 'equipo';
-    var fileName = 'horas-'+sup+'-'+(desde||'todo')+'.xlsx';
+    var desde = document.getElementById('rpt-desde').value;
+    var fileName = 'horas-reporte-'+(desde||'todo')+'.xlsx';
     XLSX.writeFile(wb, fileName);
   });
 }
@@ -1136,6 +1124,18 @@ function exportExcel(){
 // ── GESTIÓN DE PROYECTOS (P3) ──
 var _allProjects = [];
 var _editingPrjId = null;
+
+function ensureProjectsLoaded(cb){
+  if(_allProjects.length){ cb(); return; }
+  fetch('/api/projects').then(function(r){ return r.json(); })
+    .then(function(d){ _allProjects = Array.isArray(d)?d:[]; cb(); })
+    .catch(function(){ cb(); });
+}
+
+function clienteDeProyecto(name){
+  var p = _allProjects.find(function(x){ return x.name && x.name.trim()===String(name||'').trim(); });
+  return p ? (p.client||'') : '';
+}
 
 function cargarListaProyectos(){
   fetch('/api/projects')
@@ -1197,7 +1197,8 @@ function abrirFormProyecto(id){
   document.getElementById('prj-f-client').value = p ? (p.client||'') : '';
   document.getElementById('prj-f-bill').value   = p ? String(p.billable!==false) : 'true';
   document.getElementById('prj-f-close').value  = p ? (p.closeDate||'') : '';
-  document.getElementById('prj-f-emps').value   = p && p.employees && p.employees.length ? p.employees.join(', ') : '';
+  document.getElementById('prj-f-emps').value   = p && p.employeeEmails && p.employeeEmails.length ? p.employeeEmails.join(', ')
+    : (p && p.employees && p.employees.length ? p.employees.join(', ')+'  ⚠ IDs sin email asociado — reingresá los emails y guardá para actualizar' : '');
   document.getElementById('prj-form-err').style.display = 'none';
   document.getElementById('prj-form-wrap').style.display = 'block';
   document.getElementById('prj-f-name').focus();
@@ -1213,26 +1214,27 @@ function importarEmpleadosPlanilla(input){
   if(!file){ return; }
   var ext = file.name.split('.').pop().toLowerCase();
   var campo = document.getElementById('prj-f-emps');
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  function mergeIds(nuevos){
-    var existentes = campo.value.split(',').map(function(s){ return s.trim(); }).filter(function(s){ return /^\d+$/.test(s); });
+  function mergeEmails(nuevos){
+    var existentes = campo.value.split(',').map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
     var set = {};
-    existentes.forEach(function(id){ set[id]=true; });
-    nuevos.forEach(function(id){ set[id]=true; });
+    existentes.forEach(function(em){ set[em]=true; });
+    nuevos.forEach(function(em){ set[em]=true; });
     campo.value = Object.keys(set).join(', ');
     input.value = '';
-    var n = nuevos.filter(function(id){ return !existentes.includes(id); }).length;
-    alert('✓ Se agregaron '+n+' DNI'+(n!==1?'s':'')+' nuevos. Total: '+Object.keys(set).length+' empleados.');
+    var n = nuevos.filter(function(em){ return existentes.indexOf(em)===-1; }).length;
+    alert('✓ Se agregaron '+n+' email'+(n!==1?'s':'')+' nuevos. Total: '+Object.keys(set).length+' empleados.\nSe validan contra Humand al guardar el proyecto.');
   }
 
-  function extraerNumerosDeFilas(filas){
-    var ids = [];
+  function extraerEmailsDeFilas(filas){
+    var emails = [];
     filas.forEach(function(fila){
       var celda = Array.isArray(fila) ? fila[0] : fila;
-      var val = String(celda||'').trim().replace(/\D/g,'');
-      if(val.length >= 4 && val.length <= 12) ids.push(val);
+      var val = String(celda||'').trim().toLowerCase();
+      if(EMAIL_RE.test(val)) emails.push(val);
     });
-    return ids;
+    return emails;
   }
 
   if(ext === 'csv'){
@@ -1240,7 +1242,7 @@ function importarEmpleadosPlanilla(input){
     reader.onload = function(e){
       var lines = e.target.result.split(/\r?\n/).filter(function(l){ return l.trim(); });
       var filas = lines.map(function(l){ return l.split(/[,;\t]/); });
-      mergeIds(extraerNumerosDeFilas(filas));
+      mergeEmails(extraerEmailsDeFilas(filas));
     };
     reader.readAsText(file);
   } else {
@@ -1250,13 +1252,31 @@ function importarEmpleadosPlanilla(input){
         var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
         var ws = wb.Sheets[wb.SheetNames[0]];
         var filas = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-        mergeIds(extraerNumerosDeFilas(filas));
+        mergeEmails(extraerEmailsDeFilas(filas));
       } catch(err){
         alert('Error al leer el archivo: '+err.message);
       }
     };
     reader.readAsArrayBuffer(file);
   }
+}
+
+// Resuelve una lista de emails contra Humand y devuelve {resolved:[{email,id}], failed:[email,...]}
+function resolverEmailsHumand(emails){
+  if(!emails.length) return Promise.resolve({resolved:[], failed:[]});
+  return Promise.all(emails.map(function(email){
+    return apiCall('/users', { search: email, limit: 10 })
+      .then(function(res){
+        var users = (res && res.users) ? res.users : (Array.isArray(res) ? res : []);
+        var match = users.find(function(u){ return u.email && u.email.toLowerCase()===email; });
+        return match ? { email: email, id: match.id } : null;
+      })
+      .catch(function(){ return null; });
+  })).then(function(results){
+    var resolved = [], failed = [];
+    results.forEach(function(r, i){ r ? resolved.push(r) : failed.push(emails[i]); });
+    return { resolved: resolved, failed: failed };
+  });
 }
 
 function guardarProyecto(){
@@ -1266,26 +1286,43 @@ function guardarProyecto(){
   if(!nameVal){ errEl.textContent='El nombre del proyecto es requerido'; errEl.style.display='block'; return; }
   if(!_editingPrjId && !idVal){ errEl.textContent='El ID numérico es requerido'; errEl.style.display='block'; return; }
   var empsRaw = document.getElementById('prj-f-emps').value.trim();
-  var emps = empsRaw ? empsRaw.split(',').map(function(s){ return parseInt(s.trim()); }).filter(function(n){ return !isNaN(n); }) : [];
-  var body = {
-    name:      nameVal,
-    client:    document.getElementById('prj-f-client').value.trim(),
-    billable:  document.getElementById('prj-f-bill').value === 'true',
-    closeDate: document.getElementById('prj-f-close').value || null,
-    employees: emps
-  };
-  if(!_editingPrjId) body.id = Number(idVal);
-  var url    = _editingPrjId ? '/api/projects?id='+_editingPrjId : '/api/projects';
-  var method = _editingPrjId ? 'PATCH' : 'POST';
+  var emails = empsRaw ? empsRaw.split(',').map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean) : [];
+
   errEl.style.display='none';
-  fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if(data.error){ errEl.textContent=data.error; errEl.style.display='block'; return; }
-      cerrarFormProyecto();
-      cargarListaProyectos();
-    })
-    .catch(function(err){ errEl.textContent='Error al guardar: '+err.message; errEl.style.display='block'; });
+  var saveBtn = document.querySelector('#prj-form-wrap button[onclick="guardarProyecto()"]');
+  if(saveBtn){ saveBtn.disabled=true; saveBtn.textContent='Validando emails...'; }
+
+  resolverEmailsHumand(emails).then(function(r){
+    if(r.failed.length){
+      errEl.innerHTML = 'No se encontraron en Humand estos emails: <b>'+r.failed.join(', ')+'</b>. Corregilos o quitalos para poder guardar.';
+      errEl.style.display='block';
+      if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Guardar proyecto'; }
+      return;
+    }
+    var body = {
+      name:           nameVal,
+      client:         document.getElementById('prj-f-client').value.trim(),
+      billable:       document.getElementById('prj-f-bill').value === 'true',
+      closeDate:      document.getElementById('prj-f-close').value || null,
+      employees:      r.resolved.map(function(x){ return x.id; }),
+      employeeEmails: r.resolved.map(function(x){ return x.email; })
+    };
+    if(!_editingPrjId) body.id = Number(idVal);
+    var url    = _editingPrjId ? '/api/projects?id='+_editingPrjId : '/api/projects';
+    var method = _editingPrjId ? 'PATCH' : 'POST';
+    fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Guardar proyecto'; }
+        if(data.error){ errEl.textContent=data.error; errEl.style.display='block'; return; }
+        cerrarFormProyecto();
+        cargarListaProyectos();
+      })
+      .catch(function(err){
+        if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='Guardar proyecto'; }
+        errEl.textContent='Error al guardar: '+err.message; errEl.style.display='block';
+      });
+  });
 }
 
 function cerrarProyecto(id){
@@ -1312,49 +1349,88 @@ function eliminarProyecto(id){
 function clearRptFilter(){
   document.getElementById('rpt-desde').value='';
   document.getElementById('rpt-hasta').value='';
+  document.getElementById('rpt-proyecto').value='';
+  document.getElementById('rpt-cliente').value='';
+  document.getElementById('rpt-usuario').value='';
   renderReportes();
+}
+
+// Reportería: histórico completo, sin acotar por supervisor (a diferencia de filteredRequests())
+function reportesRequests(){
+  return requests.slice();
+}
+
+function renderReportesFiltersOptions(){
+  var prjSel = document.getElementById('rpt-proyecto');
+  var cliSel = document.getElementById('rpt-cliente');
+  if(!prjSel || !cliSel) return;
+  var prjNames = {}, clientes = {};
+  _allProjects.forEach(function(p){ prjNames[p.name]=true; if(p.client) clientes[p.client]=true; });
+  requests.forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.project) prjNames[e.project]=true; }); });
+  var curPrj = prjSel.value, curCli = cliSel.value;
+  prjSel.innerHTML = '<option value="">Todos</option>' + Object.keys(prjNames).sort().map(function(n){
+    return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';
+  }).join('');
+  cliSel.innerHTML = '<option value="">Todos</option>' + Object.keys(clientes).sort().map(function(c){
+    return '<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>';
+  }).join('');
+  if(Object.prototype.hasOwnProperty.call(prjNames, curPrj)) prjSel.value = curPrj;
+  if(Object.prototype.hasOwnProperty.call(clientes, curCli)) cliSel.value = curCli;
+}
+
+// Devuelve [{r:solicitud, e:entrada}] aplicando fecha + proyecto + cliente + usuario combinados
+function getFilteredEntryPairs(){
+  var desde = document.getElementById('rpt-desde') ? document.getElementById('rpt-desde').value : '';
+  var hasta = document.getElementById('rpt-hasta') ? document.getElementById('rpt-hasta').value : '';
+  var prj   = document.getElementById('rpt-proyecto') ? document.getElementById('rpt-proyecto').value : '';
+  var cli   = document.getElementById('rpt-cliente') ? document.getElementById('rpt-cliente').value : '';
+  var usr   = document.getElementById('rpt-usuario') ? document.getElementById('rpt-usuario').value.trim().toLowerCase() : '';
+
+  var pairs = [];
+  reportesRequests().forEach(function(r){
+    if(usr){
+      var hay = (r.employeeName||'').toLowerCase().indexOf(usr)>=0 || (r.employeeEmail||'').toLowerCase().indexOf(usr)>=0;
+      if(!hay) return;
+    }
+    (r.entries||[]).forEach(function(e){
+      var day = e.day || (r.submittedAt ? r.submittedAt.slice(0,10) : '');
+      if(desde && day && day < desde) return;
+      if(hasta && day && day > hasta) return;
+      if(prj && e.project !== prj) return;
+      if(cli && clienteDeProyecto(e.project) !== cli) return;
+      pairs.push({ r: r, e: e });
+    });
+  });
+  return pairs;
 }
 
 function renderReportes(){
   var content = document.getElementById('rpt-content');
   if(!content) return;
-  var vis = filteredRequests();
-  if(!vis){
-    content.innerHTML='<div class="rpt-empty">Seleccioná un supervisor para ver los reportes de su equipo.</div>';
+  if(!reportesRequests().length){
+    content.innerHTML='<div class="rpt-empty">Sin solicitudes cargadas todavía.</div>';
     return;
   }
-  if(!vis.length){
-    content.innerHTML='<div class="rpt-empty">Sin solicitudes para mostrar en el período seleccionado.</div>';
-    return;
-  }
-  // Filtro de período adicional
-  var desde = document.getElementById('rpt-desde').value;
-  var hasta  = document.getElementById('rpt-hasta').value;
-  var filtered = vis.slice();
-  if(desde) filtered = filtered.filter(function(r){
-    return (r.periodoHasta || (r.submittedAt&&r.submittedAt.slice(0,10)) || '') >= desde;
-  });
-  if(hasta)  filtered = filtered.filter(function(r){
-    return (r.periodoDesde || (r.submittedAt&&r.submittedAt.slice(0,10)) || '') <= hasta;
-  });
-  if(!filtered.length){
-    content.innerHTML='<div class="rpt-empty">Sin datos para el período seleccionado.</div>';
+  var pairs = getFilteredEntryPairs();
+  if(!pairs.length){
+    content.innerHTML='<div class="rpt-empty">Sin datos para los filtros seleccionados.</div>';
     return;
   }
   // Agregación
-  var byEmp={}, byPrj={};
+  var byEmp={}, byPrj={}, reqIds={};
   var totMin=0, totBillMin=0;
-  filtered.forEach(function(r){
-    (r.entries||[]).forEach(function(e){
-      var m    = entryMin(e);
-      var bill = e.billable !== false;
-      totMin += m; if(bill) totBillMin += m;
-      if(!byEmp[r.employeeName]) byEmp[r.employeeName]={min:0,billMin:0};
-      byEmp[r.employeeName].min += m; if(bill) byEmp[r.employeeName].billMin += m;
-      if(!byPrj[e.project]) byPrj[e.project]={min:0,billMin:0,billable:bill};
-      byPrj[e.project].min += m; if(bill) byPrj[e.project].billMin += m;
-    });
+  pairs.forEach(function(pair){
+    var r = pair.r, e = pair.e;
+    reqIds[r.id]=true;
+    var m    = entryMin(e);
+    var bill = e.billable !== false;
+    totMin += m; if(bill) totBillMin += m;
+    if(!byEmp[r.employeeName]) byEmp[r.employeeName]={min:0,billMin:0};
+    byEmp[r.employeeName].min += m; if(bill) byEmp[r.employeeName].billMin += m;
+    if(!byPrj[e.project]) byPrj[e.project]={min:0,billMin:0,billable:bill};
+    byPrj[e.project].min += m; if(bill) byPrj[e.project].billMin += m;
   });
+  var nSolic = Object.keys(reqIds).length;
   var totNoBillMin = totMin - totBillMin;
   var billPct = totMin > 0 ? Math.round(totBillMin/totMin*100) : 0;
   var nEmp = Object.keys(byEmp).length;
@@ -1403,7 +1479,7 @@ function renderReportes(){
       '<div class="rpt-ti"><div class="rpt-tl">No facturable</div><div class="rpt-tv" style="color:var(--muted)">'+fmtMin(totNoBillMin)+'</div></div>'+
       '<div class="rpt-ti"><div class="rpt-tl">% Facturable</div><div class="rpt-tv" style="color:var(--brand)">'+billPct+'%</div></div>'+
       '<div class="rpt-ti"><div class="rpt-tl">Colaboradores</div><div class="rpt-tv">'+nEmp+'</div></div>'+
-      '<div class="rpt-ti"><div class="rpt-tl">Solicitudes</div><div class="rpt-tv">'+filtered.length+'</div></div>'+
+      '<div class="rpt-ti"><div class="rpt-tl">Solicitudes</div><div class="rpt-tv">'+nSolic+'</div></div>'+
     '</div>'+
     '<div class="rpt-grid2">'+
       '<div class="rpt-card">'+
@@ -1425,7 +1501,7 @@ function renderReportes(){
 }
 
 // ── SESIÓN / LOGIN ADMIN ──
-var SESSION_KEY_ADMIN = 'humand-admin-session-v5';
+var SESSION_KEY_ADMIN = 'humand-admin-session-v6';
 var SESSION_TTL_ADMIN = 8 * 60 * 60 * 1000;
 var _pendingAdminSession = null;
 
@@ -1436,6 +1512,21 @@ function getAdminSession(){
     if(s.expires && Date.now() > s.expires){ localStorage.removeItem(SESSION_KEY_ADMIN); return null; }
     return s;
   }catch(e){ return null; }
+}
+
+// Devuelve los usuarios de un segmento de Humand cuyo nombre incluye nameIncludes.
+// No tira error si el segmento no existe o está vacío: devuelve [] (soft-fail),
+// para que la falta de un segmento no bloquee el chequeo del otro.
+function membersOfSegment(segmentationsData, nameIncludes){
+  var items = (segmentationsData && (segmentationsData.items||segmentationsData)) || [];
+  var seg = items.find(function(s){ return s.name && s.name.toLowerCase().includes(nameIncludes); });
+  if(!seg) return Promise.resolve([]);
+  var segItems = seg.segmentationItems || seg.items || [];
+  if(!segItems.length) return Promise.resolve([]);
+  var ids = segItems.map(function(i){ return i.id; }).join(',');
+  return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 200 }, 'GET')
+    .then(function(data){ return data.items||data||[]; })
+    .catch(function(){ return []; });
 }
 
 function doLoginAdmin(){
@@ -1451,23 +1542,27 @@ function doLoginAdmin(){
       var match=users.find(function(u){ return u.email&&u.email.toLowerCase()===email; });
       if(!match) throw new Error('No encontramos ningún usuario con ese email en Humand.');
       matchedUser=match;
-      // Verificar que el usuario esté en el segmento de Supervisores
+      // Verificar acceso: segmento Supervisores (gestión completa) o Gerencia (solo reportería)
       return apiCall('/segmentations', null, 'GET');
     })
-    .then(function(data){
-      var items=data.items||data||[];
-      var seg=items.find(function(s){ return s.name&&s.name.toLowerCase().includes('supervisores'); });
-      if(!seg) throw new Error('No se pudo verificar el acceso. Contactá al administrador.');
-      var segItems=seg.segmentationItems||seg.items||[];
-      if(!segItems.length) throw new Error('El segmento Supervisores no tiene usuarios asignados.');
-      var ids=segItems.map(function(i){ return i.id; }).join(',');
-      return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 200 }, 'GET');
+    .then(function(segmentationsData){
+      return Promise.all([
+        membersOfSegment(segmentationsData, 'supervisores'),
+        membersOfSegment(segmentationsData, 'gerencia')
+      ]);
     })
-    .then(function(data){
-      var supervisores=data.items||data||[];
-      var esSupervisor=supervisores.find(function(u){ return String(u.id)===String(matchedUser.id); });
-      if(!esSupervisor) throw new Error('Tu usuario no tiene acceso al panel de administración. Solo pueden ingresar los supervisores autorizados.');
-      var s={ id:matchedUser.id, firstName:matchedUser.firstName||'', lastName:matchedUser.lastName||'', email:matchedUser.email||email, expires:Date.now()+SESSION_TTL_ADMIN };
+    .then(function(results){
+      var supervisores = results[0], gerencia = results[1];
+      var isSupervisor = !!supervisores.find(function(u){ return String(u.id)===String(matchedUser.id); });
+      var isGerencia    = !!gerencia.find(function(u){ return String(u.id)===String(matchedUser.id); });
+      if(!isSupervisor && !isGerencia){
+        throw new Error('Tu usuario no tiene acceso al panel de administración. Solo pueden ingresar supervisores o el segmento Gerencia.');
+      }
+      var s={
+        id:matchedUser.id, firstName:matchedUser.firstName||'', lastName:matchedUser.lastName||'', email:matchedUser.email||email,
+        isSupervisor: isSupervisor, isGerencia: isGerencia,
+        expires:Date.now()+SESSION_TTL_ADMIN
+      };
       localStorage.setItem(SESSION_KEY_ADMIN, JSON.stringify(s));
       applyAdminSession(s);
     })
@@ -1489,8 +1584,19 @@ function applyAdminSession(s){
   document.getElementById('topbar-logout').style.display='block';
   document.getElementById('login-screen').style.display='none';
   _pendingAdminSession=s;
+  applyRoleUI(s);
   // Si los supervisores ya están cargados (caso: login fresco), auto-seleccionar ahora mismo
   tryAutoSelectSupervisor();
+}
+
+// Gerencia solo ve Reportería. Supervisores mantienen Solicitudes + Reportes + Proyectos.
+function applyRoleUI(s){
+  var isSupervisor = !!s.isSupervisor;
+  document.getElementById('tab-solicitudes').style.display = isSupervisor ? '' : 'none';
+  document.getElementById('tab-proyectos').style.display   = isSupervisor ? '' : 'none';
+  if(!isSupervisor){
+    showAdminTab('reportes');
+  }
 }
 
 function normStr(s){ return (s||'').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g,''); }

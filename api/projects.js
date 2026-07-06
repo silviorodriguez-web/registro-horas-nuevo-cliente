@@ -77,6 +77,7 @@ export default async function handler(req, res) {
         status:    'active',
         closeDate: body.closeDate || null,
         employees: Array.isArray(body.employees) ? body.employees.map(Number) : [],
+        employeeEmails: Array.isArray(body.employeeEmails) ? body.employeeEmails : [],
         createdAt: new Date().toISOString(),
       };
       projects.push(proj);

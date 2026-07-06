@@ -24,7 +24,13 @@ async function readOne(url) {
 }
 
 async function readSubmissions() {
-  const { blobs } = await list({ prefix: PREFIX, limit: 1000 });
+  let blobs = [];
+  let cursor;
+  do {
+    const page = await list({ prefix: PREFIX, limit: 1000, cursor });
+    blobs = blobs.concat(page.blobs);
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
   if (!blobs.length) return [];
   const results = await Promise.all(blobs.map(b => readOne(b.url)));
   return results
