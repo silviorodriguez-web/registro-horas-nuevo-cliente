@@ -341,8 +341,14 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           </div>
           <div class="fg">
             <label>IDs de empleados autorizados (separados por coma)</label>
-            <input type="text" id="prj-f-emps" placeholder="Ej: 12345, 67890, 11111" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
-            <span style="font-size:10px;color:var(--muted)">Dejar vacío = todos los colaboradores pueden cargar horas en este proyecto</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="text" id="prj-f-emps" placeholder="Ej: 12345, 67890, 11111" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;flex:1;min-width:0">
+              <button type="button" onclick="document.getElementById('prj-emps-file').click()"
+                style="padding:8px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--brand-d);white-space:nowrap;font-family:inherit;transition:.15s"
+                title="Importar DNIs desde planilla CSV o Excel">📋 Importar planilla</button>
+              <input type="file" id="prj-emps-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importarEmpleadosPlanilla(this)">
+            </div>
+            <span style="font-size:10px;color:var(--muted)">Dejar vacío = todos los colaboradores pueden cargar horas en este proyecto. La planilla debe tener los DNIs en la primera columna.</span>
           </div>
         </div>
         <div id="prj-form-err" style="display:none;margin-bottom:8px;font-size:12px;color:var(--err)"></div>
@@ -1029,6 +1035,13 @@ function showAdminTab(tab){
 }
 
 // ── EXPORT EXCEL (P5) ──
+function decToHMS(dec){
+  var h = Math.floor(dec);
+  var m = Math.round((dec - h) * 60);
+  if(m === 60){ h++; m = 0; }
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00';
+}
+
 function exportExcel(){
   var vis = filteredRequests();
   if(!vis||!vis.length){ alert('No hay datos para exportar. Seleccioná un supervisor primero.'); return; }
@@ -1039,68 +1052,85 @@ function exportExcel(){
   if(hasta)  filtered = filtered.filter(function(r){ return (r.periodoDesde||'') <= hasta; });
   if(!filtered.length){ alert('Sin datos para el período seleccionado.'); return; }
 
-  // Hoja 1: Detalle completo
-  var detalleRows = [['Colaborador','Email','Período','Fecha Envío','Proyecto','Día','Horas','Facturable','Estado','Aprobado por']];
-  filtered.forEach(function(r){
-    (r.entries||[]).forEach(function(e){
-      detalleRows.push([
-        r.employeeName,
-        r.employeeEmail||'',
-        r.periodo,
-        r.submittedAt ? r.submittedAt.slice(0,10) : '',
-        e.project,
-        e.day,
-        e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100,
-        e.billable!==false ? 'Sí' : 'No',
-        r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
-        r.approvedBy||''
-      ]);
-    });
-  });
+  var projectsPromise = _allProjects.length
+    ? Promise.resolve(_allProjects)
+    : fetch('/api/projects').then(function(r){ return r.json(); }).then(function(d){ _allProjects = Array.isArray(d)?d:[]; return _allProjects; }).catch(function(){ return []; });
 
-  // Hoja 2: Resumen por proyecto
-  var byPrj = {};
-  filtered.forEach(function(r){
-    (r.entries||[]).forEach(function(e){
-      if(!byPrj[e.project]) byPrj[e.project]={total:0,fact:0,noFact:0,billable:e.billable!==false};
-      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-      byPrj[e.project].total += h;
-      if(e.billable!==false) byPrj[e.project].fact += h;
-      else byPrj[e.project].noFact += h;
-    });
-  });
-  var prjRows = [['Proyecto','Total Horas','Facturable','No Facturable','% Facturable','Facturación']];
-  Object.keys(byPrj).sort().forEach(function(p){
-    var d = byPrj[p];
-    var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
-    prjRows.push([p, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%', d.billable?'Facturable':'No facturable']);
-  });
+  projectsPromise.then(function(projects){
+    function clientForProject(name){
+      var p = projects.find(function(x){ return x.name && x.name.trim()===name.trim(); });
+      return p ? (p.client||'') : '';
+    }
 
-  // Hoja 3: Resumen por colaborador
-  var byEmp = {};
-  filtered.forEach(function(r){
-    if(!byEmp[r.employeeName]) byEmp[r.employeeName]={total:0,fact:0,noFact:0};
-    (r.entries||[]).forEach(function(e){
-      var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-      byEmp[r.employeeName].total += h;
-      if(e.billable!==false) byEmp[r.employeeName].fact += h;
-      else byEmp[r.employeeName].noFact += h;
+    // Hoja 1: Detalle completo — orden estilo Clockify
+    var detalleRows = [['Client','Project','Description','User','Email','Billable','Date','Duration (h)','Duration (decimal)','Date of creation','Estado','Aprobado por','Sync Humand TT']];
+    filtered.forEach(function(r){
+      var ttLabel = r.ttSynced===true ? 'Sí' : (r.ttSynced===false ? 'No' : 'N/A');
+      (r.entries||[]).forEach(function(e){
+        var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+        detalleRows.push([
+          clientForProject(e.project),
+          e.project,
+          e.desc||'',
+          r.employeeName,
+          r.employeeEmail||'',
+          e.billable!==false ? 'Yes' : 'No',
+          e.day,
+          decToHMS(decHours),
+          decHours,
+          r.submittedAt ? r.submittedAt.slice(0,10) : '',
+          r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
+          r.approvedBy||'',
+          ttLabel
+        ]);
+      });
     });
-  });
-  var empRows = [['Colaborador','Total Horas','Facturable','No Facturable','% Facturable']];
-  Object.keys(byEmp).sort().forEach(function(n){
-    var d = byEmp[n];
-    var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
-    empRows.push([n, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
-  });
 
-  var wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalleRows), 'Detalle');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prjRows),     'Por Proyecto');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(empRows),     'Por Colaborador');
-  var sup = selectedSupervisor ? selectedSupervisor.name.replace(/[^a-z0-9]/gi,'_') : 'equipo';
-  var fileName = 'horas-'+sup+'-'+(desde||'todo')+'.xlsx';
-  XLSX.writeFile(wb, fileName);
+    // Hoja 2: Resumen por proyecto
+    var byPrj = {};
+    filtered.forEach(function(r){
+      (r.entries||[]).forEach(function(e){
+        var key = e.project;
+        if(!byPrj[key]) byPrj[key]={client:clientForProject(key),total:0,fact:0,noFact:0};
+        var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+        byPrj[key].total += h;
+        if(e.billable!==false) byPrj[key].fact += h;
+        else byPrj[key].noFact += h;
+      });
+    });
+    var prjRows = [['Client','Project','Total Horas','Facturable','No Facturable','% Facturable']];
+    Object.keys(byPrj).sort().forEach(function(p){
+      var d = byPrj[p];
+      var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
+      prjRows.push([d.client, p, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+    });
+
+    // Hoja 3: Resumen por colaborador
+    var byEmp = {};
+    filtered.forEach(function(r){
+      if(!byEmp[r.employeeName]) byEmp[r.employeeName]={email:r.employeeEmail||'',total:0,fact:0,noFact:0};
+      (r.entries||[]).forEach(function(e){
+        var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+        byEmp[r.employeeName].total += h;
+        if(e.billable!==false) byEmp[r.employeeName].fact += h;
+        else byEmp[r.employeeName].noFact += h;
+      });
+    });
+    var empRows = [['User','Email','Total Horas','Facturable','No Facturable','% Facturable']];
+    Object.keys(byEmp).sort().forEach(function(n){
+      var d = byEmp[n];
+      var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
+      empRows.push([n, d.email, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+    });
+
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalleRows), 'Detailed Report');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prjRows),     'Por Proyecto');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(empRows),     'Por Colaborador');
+    var sup = selectedSupervisor ? selectedSupervisor.name.replace(/[^a-z0-9]/gi,'_') : 'equipo';
+    var fileName = 'horas-'+sup+'-'+(desde||'todo')+'.xlsx';
+    XLSX.writeFile(wb, fileName);
+  });
 }
 
 // ── GESTIÓN DE PROYECTOS (P3) ──
@@ -1176,6 +1206,57 @@ function abrirFormProyecto(id){
 function cerrarFormProyecto(){
   document.getElementById('prj-form-wrap').style.display='none';
   _editingPrjId=null;
+}
+
+function importarEmpleadosPlanilla(input){
+  var file = input.files[0];
+  if(!file){ return; }
+  var ext = file.name.split('.').pop().toLowerCase();
+  var campo = document.getElementById('prj-f-emps');
+
+  function mergeIds(nuevos){
+    var existentes = campo.value.split(',').map(function(s){ return s.trim(); }).filter(function(s){ return /^\d+$/.test(s); });
+    var set = {};
+    existentes.forEach(function(id){ set[id]=true; });
+    nuevos.forEach(function(id){ set[id]=true; });
+    campo.value = Object.keys(set).join(', ');
+    input.value = '';
+    var n = nuevos.filter(function(id){ return !existentes.includes(id); }).length;
+    alert('✓ Se agregaron '+n+' DNI'+(n!==1?'s':'')+' nuevos. Total: '+Object.keys(set).length+' empleados.');
+  }
+
+  function extraerNumerosDeFilas(filas){
+    var ids = [];
+    filas.forEach(function(fila){
+      var celda = Array.isArray(fila) ? fila[0] : fila;
+      var val = String(celda||'').trim().replace(/\D/g,'');
+      if(val.length >= 4 && val.length <= 12) ids.push(val);
+    });
+    return ids;
+  }
+
+  if(ext === 'csv'){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var lines = e.target.result.split(/\r?\n/).filter(function(l){ return l.trim(); });
+      var filas = lines.map(function(l){ return l.split(/[,;\t]/); });
+      mergeIds(extraerNumerosDeFilas(filas));
+    };
+    reader.readAsText(file);
+  } else {
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var filas = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        mergeIds(extraerNumerosDeFilas(filas));
+      } catch(err){
+        alert('Error al leer el archivo: '+err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
 }
 
 function guardarProyecto(){
@@ -1363,12 +1444,30 @@ function doLoginAdmin(){
   var btn=document.getElementById('btn-login');
   btn.disabled=true; btn.textContent='Verificando...';
   setAdminLoginErr('');
+  var matchedUser=null;
   apiCall('/users', { search: email, limit: 30 })
     .then(function(res){
       var users=(res&&res.users)?res.users:(Array.isArray(res)?res:[]);
       var match=users.find(function(u){ return u.email&&u.email.toLowerCase()===email; });
       if(!match) throw new Error('No encontramos ningún usuario con ese email en Humand.');
-      var s={ id:match.id, firstName:match.firstName||'', lastName:match.lastName||'', email:match.email||email, expires:Date.now()+SESSION_TTL_ADMIN };
+      matchedUser=match;
+      // Verificar que el usuario esté en el segmento de Supervisores
+      return apiCall('/segmentations', null, 'GET');
+    })
+    .then(function(data){
+      var items=data.items||data||[];
+      var seg=items.find(function(s){ return s.name&&s.name.toLowerCase().includes('supervisores'); });
+      if(!seg) throw new Error('No se pudo verificar el acceso. Contactá al administrador.');
+      var segItems=seg.segmentationItems||seg.items||[];
+      if(!segItems.length) throw new Error('El segmento Supervisores no tiene usuarios asignados.');
+      var ids=segItems.map(function(i){ return i.id; }).join(',');
+      return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 200 }, 'GET');
+    })
+    .then(function(data){
+      var supervisores=data.items||data||[];
+      var esSupervisor=supervisores.find(function(u){ return String(u.id)===String(matchedUser.id); });
+      if(!esSupervisor) throw new Error('Tu usuario no tiene acceso al panel de administración. Solo pueden ingresar los supervisores autorizados.');
+      var s={ id:matchedUser.id, firstName:matchedUser.firstName||'', lastName:matchedUser.lastName||'', email:matchedUser.email||email, expires:Date.now()+SESSION_TTL_ADMIN };
       localStorage.setItem(SESSION_KEY_ADMIN, JSON.stringify(s));
       applyAdminSession(s);
     })

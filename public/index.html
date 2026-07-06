@@ -243,6 +243,22 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 
   <!-- Panel de carga (oculto hasta que seleccione usuario) -->
   <div id="panel-carga" style="display:none">
+
+    <!-- Card proyectos asignados — solo visible si tiene proyectos asignados -->
+    <div id="proyectos-asignados-wrap" class="card" style="display:none">
+      <div class="card-hd">
+        Mis proyectos asignados
+        <span class="sub">Seleccioná para cargar horas rápidamente</span>
+      </div>
+      <div class="card-body" style="padding:14px 20px">
+        <select id="sel-proyecto-asignado" onchange="seleccionarProyectoAsignado(this)"
+          style="padding:9px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;transition:border-color .15s;width:100%;max-width:600px">
+          <option value="">— Seleccioná un proyecto asignado —</option>
+        </select>
+        <p style="margin-top:8px;font-size:11px;color:var(--muted)">Al seleccionar un proyecto se cargará automáticamente en el campo "Proyecto / Cliente" de abajo.</p>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-hd">
         Nueva entrada
@@ -1311,8 +1327,10 @@ function submitDirect(){
       })
       .then(function(){ return sendEntry(i+1); });
   }
+  var _ttSynced = false;
   sendEntry(0)
-    .catch(function(err){ console.warn('[directo] Humand TT error:', err.message); })
+    .then(function(){ _ttSynced = true; })
+    .catch(function(err){ console.warn('[directo] Humand TT error:', err.message); _ttSynced = false; })
     .then(function(){ return guardarEnFiles(submission, fileName); })
     .then(function(fileId){
       var sub = {
@@ -1331,6 +1349,7 @@ function submitDirect(){
         submittedAt: submission.submittedAt,
         status:      'approved',
         approvedBy:  'Carga directa',
+        ttSynced:    _ttSynced,
         comment:     '',
         modified:    false,
         entries:     submission.entries
@@ -1349,8 +1368,13 @@ function submitDirect(){
       sucEl.style.display='block';
       sucEl.scrollIntoView({behavior:'smooth'});
       var h3 = sucEl.querySelector('h3'), pp = sucEl.querySelector('p');
-      if(h3) h3.textContent = 'Horas registradas en Humand';
-      if(pp)  pp.innerHTML  = 'Tus horas fueron enviadas directamente al módulo de Time Tracking.<br>No requieren aprobación del supervisor.';
+      if(_ttSynced){
+        if(h3) h3.textContent = 'Horas registradas en Humand';
+        if(pp)  pp.innerHTML  = 'Tus horas fueron enviadas directamente al módulo de Time Tracking.<br>No requieren aprobación del supervisor.';
+      } else {
+        if(h3) h3.textContent = 'Horas registradas correctamente';
+        if(pp)  pp.innerHTML  = 'Tus horas quedaron guardadas y están disponibles para el reporte del equipo.<br>No requieren aprobación del supervisor.';
+      }
       if(btn){ btn.innerHTML='⚡ Enviar directo a Humand'; btn.disabled=false; }
     })
     .catch(function(err){
@@ -1364,8 +1388,38 @@ function cargarProyectosManaged(){
   if(!currentUser) return;
   fetch('/api/projects?employeeId='+currentUser.id)
     .then(function(r){ return r.json(); })
-    .then(function(data){ _managedProjects = Array.isArray(data)?data:[]; })
+    .then(function(data){
+      _managedProjects = Array.isArray(data)?data:[];
+      renderDropdownProyectosAsignados();
+    })
     .catch(function(){ _managedProjects=[]; });
+}
+
+function renderDropdownProyectosAsignados(){
+  var wrap = document.getElementById('proyectos-asignados-wrap');
+  var sel  = document.getElementById('sel-proyecto-asignado');
+  if(!wrap || !sel) return;
+  var activos = _managedProjects.filter(function(p){ return p.status==='active'; });
+  if(!activos.length){ wrap.style.display='none'; return; }
+  sel.innerHTML = '<option value="">— Seleccioná un proyecto asignado —</option>' +
+    activos.map(function(p){
+      return '<option value="'+p.id+'" data-name="'+p.name.replace(/"/g,'&quot;')+'">'
+        +'#'+p.id+' — '+p.name+(p.client?' ('+p.client+')':'')+(p.billable===false?' · No fact.':'')+'</option>';
+    }).join('');
+  wrap.style.display = 'block';
+}
+
+function seleccionarProyectoAsignado(sel){
+  var opt = sel.options[sel.selectedIndex];
+  if(!opt || !opt.value) return;
+  var nombre = opt.getAttribute('data-name') || opt.text;
+  var id     = Number(opt.value);
+  document.getElementById('c-prj').value = nombre;
+  _currentProjectId = id;
+  var msg = document.getElementById('prj-access-msg');
+  if(msg) msg.style.display='none';
+  // reset el select para que quede como atajo, no como estado
+  setTimeout(function(){ sel.value=''; }, 50);
 }
 
 // ── CARGA MASIVA CSV ──
