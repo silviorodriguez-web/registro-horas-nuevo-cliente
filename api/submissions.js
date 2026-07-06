@@ -31,10 +31,14 @@ async function readSubmissions() {
     blobs = blobs.concat(page.blobs);
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
+  // El namespace de blobs comparte prefijo con otros archivos no-submission
+  // (ej: horas-sub-cliente/projects.json). Solo nos interesan los que matchean
+  // el patrón real de un blobPath(id): PREFIX + dígitos + .json
+  blobs = blobs.filter(b => /\/\d+\.json$/.test(b.pathname));
   if (!blobs.length) return [];
   const results = await Promise.all(blobs.map(b => readOne(b.url)));
   return results
-    .filter(Boolean)
+    .filter(s => s && typeof s === 'object' && !Array.isArray(s) && Array.isArray(s.entries))
     .sort((a, b) => b.id - a.id); // más reciente primero
 }
 
