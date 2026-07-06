@@ -544,6 +544,39 @@ function apiCall(path, params, method, body){
   return fetch(url,opts).then(function(r){ return r.json(); });
 }
 
+// Busca un usuario de Humand por email. Algunos usuarios de este tenant tienen
+// el campo `email` en null (el email real vive en `employeeInternalId`), así que
+// probamos ambos campos y, si no matchea, buscamos por nombre derivado del email.
+function _matchUserPorEmail(users, email){
+  return users.find(function(u){
+    return (u.email && u.email.toLowerCase()===email) ||
+           (u.employeeInternalId && u.employeeInternalId.toLowerCase()===email);
+  }) || null;
+}
+function buscarUsuarioHumandPorEmail(email){
+  return apiCall('/users', { search: email, limit: 30 }).then(function(res){
+    var users = (res&&res.users) ? res.users : (Array.isArray(res)?res:[]);
+    var match = _matchUserPorEmail(users, email);
+    if(match) return match;
+    var namePart = email.split('@')[0].replace(/[._\-]/g,' ');
+    var parts = namePart.trim().split(/\s+/);
+    return apiCall('/users', { search: namePart, limit: 50 }).then(function(res2){
+      var users2 = (res2&&res2.users) ? res2.users : (Array.isArray(res2)?res2:[]);
+      var m = _matchUserPorEmail(users2, email);
+      if(!m && parts.length>=2){
+        var fn0=parts[0].normalize('NFD').replace(/[̀-ͯ]/g,'');
+        var ln0=parts[parts.length-1].normalize('NFD').replace(/[̀-ͯ]/g,'');
+        m = users2.find(function(u){
+          var fn=(u.firstName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+          var ln=(u.lastName||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+          return fn.includes(fn0)&&ln.includes(ln0);
+        });
+      }
+      return m || null;
+    });
+  });
+}
+
 // ── PERSISTENCIA ──
 function saveSubmissions(){ localStorage.setItem(LS_KEY, JSON.stringify(requests)); }
 
@@ -1265,12 +1298,8 @@ function importarEmpleadosPlanilla(input){
 function resolverEmailsHumand(emails){
   if(!emails.length) return Promise.resolve({resolved:[], failed:[]});
   return Promise.all(emails.map(function(email){
-    return apiCall('/users', { search: email, limit: 10 })
-      .then(function(res){
-        var users = (res && res.users) ? res.users : (Array.isArray(res) ? res : []);
-        var match = users.find(function(u){ return u.email && u.email.toLowerCase()===email; });
-        return match ? { email: email, id: match.id } : null;
-      })
+    return buscarUsuarioHumandPorEmail(email)
+      .then(function(match){ return match ? { email: email, id: match.id } : null; })
       .catch(function(){ return null; });
   })).then(function(results){
     var resolved = [], failed = [];
@@ -1536,10 +1565,8 @@ function doLoginAdmin(){
   btn.disabled=true; btn.textContent='Verificando...';
   setAdminLoginErr('');
   var matchedUser=null;
-  apiCall('/users', { search: email, limit: 30 })
-    .then(function(res){
-      var users=(res&&res.users)?res.users:(Array.isArray(res)?res:[]);
-      var match=users.find(function(u){ return u.email&&u.email.toLowerCase()===email; });
+  buscarUsuarioHumandPorEmail(email)
+    .then(function(match){
       if(!match) throw new Error('No encontramos ningún usuario con ese email en Humand.');
       matchedUser=match;
       // Verificar acceso: segmento Supervisores (gestión completa) o Gerencia (solo reportería)
