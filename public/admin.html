@@ -1554,7 +1554,11 @@ function membersOfSegment(segmentationsData, nameIncludes){
   if(!segItems.length) return Promise.resolve([]);
   var ids = segItems.map(function(i){ return i.id; }).join(',');
   return apiCall('/segmentations/users', { segmentationItemIds: ids, limit: 200 }, 'GET')
-    .then(function(data){ return data.items||data||[]; })
+    .then(function(data){
+      if(Array.isArray(data)) return data;
+      if(data && Array.isArray(data.items)) return data.items;
+      return [];
+    })
     .catch(function(){ return []; });
 }
 
