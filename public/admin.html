@@ -301,7 +301,8 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       <label>Usuario</label>
       <input type="text" class="filter-inp" id="rpt-usuario" placeholder="Nombre o email..." oninput="renderReportes()" style="min-width:170px">
       <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtros</button>
-      <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669;margin-left:auto">⬇ Exportar Excel</button>
+      <button class="btn btn-sm" onclick="exportPF()" style="font-size:11px;padding:4px 12px;background:#fff;color:var(--brand-d);border-color:var(--brand-d);margin-left:auto" title="Genera el CSV en el formato de nómina de IMR (PF_PlantillaRegTiempos)">⬇ Exportar formato nómina</button>
+      <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669">⬇ Exportar Excel</button>
     </div>
     <div id="rpt-content"><div class="rpt-empty">Cargando reportes...</div></div>
   </div><!-- /panel-reportes -->
@@ -331,6 +332,20 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           <div class="fg">
             <label>Cliente</label>
             <input type="text" id="prj-f-client" placeholder="Ej: IMR" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+          <div class="fg">
+            <label>Código de cliente (export nómina)</label>
+            <input type="text" id="prj-f-clientcode" placeholder="Ej: 00123" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+          <div class="fg">
+            <label>División (export nómina)</label>
+            <input type="text" id="prj-f-division" placeholder="Ej: División A" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+          </div>
+          <div class="fg">
+            <label>Tipo de contrato (export nómina)</label>
+            <input type="text" id="prj-f-contracttype" placeholder="Ej: Servicios" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:12px;align-items:end">
@@ -365,6 +380,31 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       </div>
       <div id="prj-list-content" style="padding:14px 20px">
         <div class="rpt-empty" style="padding:20px">Cargando proyectos...</div>
+      </div>
+    </div>
+
+    <!-- ── LEGAJOS DE NÓMINA (para export PF) ── -->
+    <div class="card">
+      <div class="card-hd">
+        Legajos de nómina
+        <span class="sub">Usado para el export en formato de nómina (columna LEGAJO_PERSONAL)</span>
+      </div>
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+        <div class="fg">
+          <label>Email de Humand</label>
+          <input type="text" id="leg-f-email" placeholder="juan.perez@empresa.com" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;min-width:240px">
+        </div>
+        <div class="fg">
+          <label>Legajo</label>
+          <input type="text" id="leg-f-legajo" placeholder="Ej: 12345" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:120px">
+        </div>
+        <button class="btn btn-sm" style="background:var(--brand);color:#fff;border-color:var(--brand)" onclick="agregarLegajo()">+ Agregar</button>
+        <button class="btn btn-sm" onclick="document.getElementById('leg-file').click()">📋 Importar planilla</button>
+        <input type="file" id="leg-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="importarLegajosPlanilla(this)">
+        <span style="font-size:10px;color:var(--muted);width:100%">La planilla debe tener email en la primera columna y legajo en la segunda.</span>
+      </div>
+      <div id="leg-list-content" style="padding:14px 20px">
+        <div class="rpt-empty" style="padding:20px">Cargando legajos...</div>
       </div>
     </div>
   </div><!-- /panel-proyectos -->
@@ -1071,7 +1111,7 @@ function showAdminTab(tab){
   document.getElementById('tab-reportes').classList.toggle('active',    tab==='reportes');
   document.getElementById('tab-proyectos').classList.toggle('active',   tab==='proyectos');
   if(tab==='reportes')  ensureProjectsLoaded(function(){ renderReportesFiltersOptions(); renderReportes(); });
-  if(tab==='proyectos') cargarListaProyectos();
+  if(tab==='proyectos'){ cargarListaProyectos(); cargarLegajos(); }
 }
 
 // ── EXPORT EXCEL (P5) ──
@@ -1080,6 +1120,78 @@ function decToHMS(dec){
   var m = Math.round((dec - h) * 60);
   if(m === 60){ h++; m = 0; }
   return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00';
+}
+
+function decToHM(dec){
+  var h = Math.floor(dec);
+  var m = Math.round((dec - h) * 60);
+  if(m === 60){ h++; m = 0; }
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+// ── EXPORT FORMATO NÓMINA (PF_PlantillaRegTiempos) ──
+function fechaDDMMAAAA(dayStr){
+  if(!dayStr) return '';
+  var p = dayStr.split('-');
+  return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0]) : dayStr;
+}
+
+function exportPF(){
+  var pairs = getFilteredEntryPairs();
+  if(!pairs.length){ alert('No hay datos para exportar con los filtros actuales.'); return; }
+
+  ensureProjectsLoaded(function(){
+    fetch('/api/legajos').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(legajos){
+      legajos = legajos && typeof legajos==='object' ? legajos : {};
+      var sinLegajo = {};
+      var header = 'T;NOMBRE_PERSONAL;*LEGAJO_PERSONAL;*FECHA;CLIENTE;NOMBRE CLIENTE;*CONTRATO-DIVISION;NOMBRE DIVISION;*CONTRATO-TIPO;NOMBRE TIPO;*CONTRATO-NUMERO;NOMBRE CONTRATO;*TAREA;NOMBRE TAREA;*TIEMPO;OBSERVACIONES;CATEGORIA';
+      var lines = [header];
+
+      pairs.forEach(function(pair){
+        var r = pair.r, e = pair.e;
+        var proj = _allProjects.find(function(p){ return p.name && p.name.trim()===String(e.project||'').trim(); });
+        var email = (r.employeeEmail||'').toLowerCase();
+        var legajo = legajos[email] || '';
+        if(!legajo) sinLegajo[r.employeeName] = true;
+        var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+        var row = [
+          'D',
+          (r.employeeName||'').trim().replace(/\s+/g,'_'),
+          legajo,
+          fechaDDMMAAAA(e.day),
+          proj ? (proj.clientCode||'') : '',
+          proj ? (proj.client||'') : '',
+          proj ? (proj.division||'') : '',
+          '',
+          proj ? (proj.contractType||'') : '',
+          '',
+          proj ? proj.id : (e.projectId||''),
+          e.project||'',
+          'HP',
+          '',
+          decToHM(decHours),
+          e.desc||'',
+          ''
+        ];
+        lines.push(row.map(function(v){ return String(v==null?'':v).replace(/;/g,','); }).join(';'));
+      });
+
+      var csv = '﻿' + lines.join('\r\n');
+      var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      var desde = document.getElementById('rpt-desde').value;
+      a.download = 'PF_RegTiempos_'+(desde||'export')+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      var faltantes = Object.keys(sinLegajo);
+      if(faltantes.length){
+        alert('⚠ Estos colaboradores no tienen legajo cargado (columna LEGAJO_PERSONAL quedó vacía):\n'+faltantes.join(', ')+'\n\nCargalos en Proyectos → Legajos de nómina.');
+      }
+    });
+  });
 }
 
 function exportExcel(){
@@ -1228,6 +1340,9 @@ function abrirFormProyecto(id){
   document.getElementById('prj-f-id').disabled  = !!p; // no cambiar ID de proyecto existente
   document.getElementById('prj-f-name').value   = p ? p.name : '';
   document.getElementById('prj-f-client').value = p ? (p.client||'') : '';
+  document.getElementById('prj-f-clientcode').value   = p ? (p.clientCode||'') : '';
+  document.getElementById('prj-f-division').value     = p ? (p.division||'') : '';
+  document.getElementById('prj-f-contracttype').value = p ? (p.contractType||'') : '';
   document.getElementById('prj-f-bill').value   = p ? String(p.billable!==false) : 'true';
   document.getElementById('prj-f-close').value  = p ? (p.closeDate||'') : '';
   document.getElementById('prj-f-emps').value   = p && p.employeeEmails && p.employeeEmails.length ? p.employeeEmails.join(', ')
@@ -1331,6 +1446,9 @@ function guardarProyecto(){
     var body = {
       name:           nameVal,
       client:         document.getElementById('prj-f-client').value.trim(),
+      clientCode:     document.getElementById('prj-f-clientcode').value.trim(),
+      division:       document.getElementById('prj-f-division').value.trim(),
+      contractType:   document.getElementById('prj-f-contracttype').value.trim(),
       billable:       document.getElementById('prj-f-bill').value === 'true',
       closeDate:      document.getElementById('prj-f-close').value || null,
       employees:      r.resolved.map(function(x){ return x.id; }),
@@ -1373,6 +1491,117 @@ function eliminarProyecto(id){
   fetch('/api/projects?id='+id,{method:'DELETE'})
     .then(function(){ cargarListaProyectos(); })
     .catch(function(err){ alert('Error: '+err.message); });
+}
+
+// ── LEGAJOS DE NÓMINA ──
+var _legajos = {};
+
+function cargarLegajos(){
+  fetch('/api/legajos')
+    .then(function(r){ return r.json(); })
+    .then(function(data){ _legajos = (data && typeof data==='object') ? data : {}; renderListaLegajos(); })
+    .catch(function(){ document.getElementById('leg-list-content').innerHTML='<div style="color:var(--err);font-size:13px">Error al cargar legajos</div>'; });
+}
+
+function renderListaLegajos(){
+  var el = document.getElementById('leg-list-content');
+  var emails = Object.keys(_legajos).sort();
+  if(!emails.length){
+    el.innerHTML = '<div class="rpt-empty" style="padding:16px">Sin legajos cargados todavía.</div>';
+    return;
+  }
+  var rows = emails.map(function(email){
+    return '<tr>'+
+      '<td style="padding:7px 10px;font-size:13px">'+email+'</td>'+
+      '<td style="padding:7px 10px;font-size:13px;font-family:monospace">'+_legajos[email]+'</td>'+
+      '<td style="padding:7px 10px"><button class="btn-icon del" title="Eliminar" onclick="eliminarLegajo(\''+email.replace(/'/g,"\\'")+'\')">🗑</button></td>'+
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+
+    '<thead><tr style="border-bottom:2px solid var(--border)">'+
+      '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Email</th>'+
+      '<th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Legajo</th>'+
+      '<th></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function agregarLegajo(){
+  var email  = (document.getElementById('leg-f-email').value||'').trim().toLowerCase();
+  var legajo = (document.getElementById('leg-f-legajo').value||'').trim();
+  if(!email || !legajo){ alert('Completá email y legajo.'); return; }
+  var body = {}; body[email] = legajo;
+  fetch('/api/legajos', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      _legajos = data;
+      document.getElementById('leg-f-email').value='';
+      document.getElementById('leg-f-legajo').value='';
+      renderListaLegajos();
+    })
+    .catch(function(err){ alert('Error al guardar: '+err.message); });
+}
+
+function eliminarLegajo(email){
+  if(!confirm('¿Quitar el legajo de '+email+'?')) return;
+  fetch('/api/legajos?email='+encodeURIComponent(email), {method:'DELETE'})
+    .then(function(r){ return r.json(); })
+    .then(function(data){ _legajos = data; renderListaLegajos(); })
+    .catch(function(err){ alert('Error: '+err.message); });
+}
+
+function importarLegajosPlanilla(input){
+  var file = input.files[0];
+  if(!file) return;
+  var ext = file.name.split('.').pop().toLowerCase();
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function filasAMapa(filas){
+    var map = {};
+    filas.forEach(function(fila){
+      if(!Array.isArray(fila) || fila.length<2) return;
+      var email  = String(fila[0]||'').trim().toLowerCase();
+      var legajo = String(fila[1]||'').trim();
+      if(EMAIL_RE.test(email) && legajo) map[email]=legajo;
+    });
+    return map;
+  }
+
+  function subir(map){
+    var n = Object.keys(map).length;
+    if(!n){ alert('No se encontraron filas válidas (email + legajo) en el archivo.'); input.value=''; return; }
+    fetch('/api/legajos', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(map)})
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        _legajos = data;
+        renderListaLegajos();
+        input.value='';
+        alert('✓ Se importaron '+n+' legajo'+(n!==1?'s':'')+'.');
+      })
+      .catch(function(err){ alert('Error al guardar: '+err.message); });
+  }
+
+  if(ext === 'csv'){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var lines = e.target.result.split(/\r?\n/).filter(function(l){ return l.trim(); });
+      var filas = lines.map(function(l){ return l.split(/[,;\t]/); });
+      subir(filasAMapa(filas));
+    };
+    reader.readAsText(file);
+  } else {
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        var wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        var filas = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        subir(filasAMapa(filas));
+      } catch(err){
+        alert('Error al leer el archivo: '+err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
 }
 
 function clearRptFilter(){
