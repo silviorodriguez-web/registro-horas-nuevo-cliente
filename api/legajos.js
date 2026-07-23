@@ -1,28 +1,10 @@
-// api/legajos.js — Mapeo email de Humand -> legajo de nómina (para export PF)
+// api/legajos.js — Mapeo email de Humand -> legajo de nómina (Postgres/Neon)
 //
 // GET    /api/legajos            -> { "email@dominio.com": "12345", ... }
 // POST   /api/legajos            -> body: { "email@dominio.com": "12345", ... } (merge)
 // DELETE /api/legajos?email=...  -> elimina una entrada
 
-import { put, list } from '@vercel/blob';
-
-const BLOB_KEY = 'horas-legajos.json';
-
-async function readLegajos() {
-  const { blobs } = await list({ prefix: BLOB_KEY, limit: 1 });
-  if (!blobs.length) return {};
-  const res = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
-  if (!res.ok) throw new Error(`No se pudo leer ${BLOB_KEY} del blob (status ${res.status})`);
-  return await res.json();
-}
-
-async function writeLegajos(map) {
-  await put(BLOB_KEY, JSON.stringify(map), {
-    access: 'public',
-    addRandomSuffix: false,
-    contentType: 'application/json',
-  });
-}
+import { getPool } from './_db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,9 +13,13 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
+  const pool = getPool();
+
   try {
     if (req.method === 'GET') {
-      const map = await readLegajos();
+      const { rows } = await pool.query('SELECT email, legajo FROM legajos');
+      const map = {};
+      rows.forEach(r => { map[r.email] = r.legajo; });
       return res.status(200).json(map);
     }
 
@@ -42,23 +28,31 @@ export default async function handler(req, res) {
       if (!body || typeof body !== 'object' || Array.isArray(body)) {
         return res.status(400).json({ error: 'Body inválido: se espera un objeto {email: legajo}' });
       }
-      const current = await readLegajos();
-      Object.keys(body).forEach(email => {
-        const key = String(email).trim().toLowerCase();
-        const legajo = String(body[email]).trim();
-        if (key && legajo) current[key] = legajo;
-      });
-      await writeLegajos(current);
-      return res.status(200).json(current);
+      for (const [rawEmail, rawLegajo] of Object.entries(body)) {
+        const email = String(rawEmail).trim().toLowerCase();
+        const legajo = String(rawLegajo).trim();
+        if (email && legajo) {
+          await pool.query(
+            `INSERT INTO legajos (email, legajo) VALUES ($1,$2)
+             ON CONFLICT (email) DO UPDATE SET legajo = EXCLUDED.legajo`,
+            [email, legajo]
+          );
+        }
+      }
+      const { rows } = await pool.query('SELECT email, legajo FROM legajos');
+      const map = {};
+      rows.forEach(r => { map[r.email] = r.legajo; });
+      return res.status(200).json(map);
     }
 
     if (req.method === 'DELETE') {
       const email = (req.query.email || '').toLowerCase();
       if (!email) return res.status(400).json({ error: 'Falta parámetro email' });
-      const current = await readLegajos();
-      delete current[email];
-      await writeLegajos(current);
-      return res.status(200).json(current);
+      await pool.query('DELETE FROM legajos WHERE email = $1', [email]);
+      const { rows } = await pool.query('SELECT email, legajo FROM legajos');
+      const map = {};
+      rows.forEach(r => { map[r.email] = r.legajo; });
+      return res.status(200).json(map);
     }
 
     return res.status(405).json({ error: 'Método no permitido' });

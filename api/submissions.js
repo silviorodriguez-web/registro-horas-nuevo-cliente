@@ -1,54 +1,11 @@
-// api/submissions.js — Un archivo Blob por submission (sin race conditions)
+// api/submissions.js — Submissions en Postgres (Neon)
 //
 // GET    /api/submissions         → lista todas las submissions
 // POST   /api/submissions         → crea una submission nueva
 // PATCH  /api/submissions?id=... → actualiza una submission (aprobar, editar)
 // DELETE /api/submissions?id=... → elimina una submission
 
-import { put, list, del } from '@vercel/blob';
-
-const PREFIX = 'horas-sub-cliente/';
-
-function blobPath(id) {
-  return `${PREFIX}${id}.json`;
-}
-
-async function readOne(url) {
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-async function readSubmissions() {
-  let blobs = [];
-  let cursor;
-  do {
-    const page = await list({ prefix: PREFIX, limit: 1000, cursor });
-    blobs = blobs.concat(page.blobs);
-    cursor = page.hasMore ? page.cursor : undefined;
-  } while (cursor);
-  // El namespace de blobs comparte prefijo con otros archivos no-submission
-  // (ej: horas-sub-cliente/projects.json). Solo nos interesan los que matchean
-  // el patrón real de un blobPath(id): PREFIX + dígitos + .json
-  blobs = blobs.filter(b => /\/\d+\.json$/.test(b.pathname));
-  if (!blobs.length) return [];
-  const results = await Promise.all(blobs.map(b => readOne(b.url)));
-  return results
-    .filter(s => s && typeof s === 'object' && !Array.isArray(s) && Array.isArray(s.entries))
-    .sort((a, b) => b.id - a.id); // más reciente primero
-}
-
-async function writeOne(sub) {
-  await put(blobPath(sub.id), JSON.stringify(sub), {
-    access: 'public',
-    addRandomSuffix: false,
-    contentType: 'application/json',
-  });
-}
+import { getPool } from './_db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -57,36 +14,39 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
+  const pool = getPool();
+
   try {
     if (req.method === 'GET') {
-      const submissions = await readSubmissions();
-      return res.status(200).json(submissions);
+      const { rows } = await pool.query('SELECT data FROM submissions ORDER BY id DESC');
+      return res.status(200).json(rows.map(r => r.data));
     }
 
     if (req.method === 'POST') {
       if (!req.body?.id) return res.status(400).json({ error: 'Body inválido: falta id' });
-      await writeOne(req.body);
+      await pool.query(
+        `INSERT INTO submissions (id, data) VALUES ($1,$2)
+         ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
+        [req.body.id, JSON.stringify(req.body)]
+      );
       return res.status(201).json(req.body);
     }
 
     if (req.method === 'PATCH') {
       const id = Number(req.query.id);
       if (!id) return res.status(400).json({ error: 'Falta parámetro id' });
-      const { blobs } = await list({ prefix: blobPath(id), limit: 1 });
-      if (!blobs.length) return res.status(404).json({ error: 'Submission no encontrada' });
-      const existing = await readOne(blobs[0].url);
-      if (!existing) return res.status(404).json({ error: 'Submission no encontrada' });
-      const updated = { ...existing, ...req.body };
-      await writeOne(updated);
+      const { rows } = await pool.query('SELECT data FROM submissions WHERE id = $1', [id]);
+      if (!rows.length) return res.status(404).json({ error: 'Submission no encontrada' });
+      const updated = { ...rows[0].data, ...req.body };
+      await pool.query('UPDATE submissions SET data = $2 WHERE id = $1', [id, JSON.stringify(updated)]);
       return res.status(200).json(updated);
     }
 
     if (req.method === 'DELETE') {
       const id = Number(req.query.id);
       if (!id) return res.status(400).json({ error: 'Falta parámetro id' });
-      const { blobs } = await list({ prefix: blobPath(id), limit: 1 });
-      if (!blobs.length) return res.status(404).json({ error: 'Submission no encontrada' });
-      await del(blobs[0].url);
+      const { rowCount } = await pool.query('DELETE FROM submissions WHERE id = $1', [id]);
+      if (!rowCount) return res.status(404).json({ error: 'Submission no encontrada' });
       return res.status(200).json({ ok: true });
     }
 
