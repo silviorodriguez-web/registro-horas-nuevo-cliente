@@ -413,7 +413,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
 <script>
 var PROXY  = '/api/humand';
 var LS_KEY = 'humand-horas-cliente';
-var NOTIFY_WALL_ENABLED = false; // false = no envía mensajes al muro ni push notifications
+var NOTIFY_WALL_ENABLED = true; // true = envía mensajes al muro (post segmentado) al aprobar/borrar solicitudes
 
 function buildAdminProjectsDatalist(){
   var set = {};
