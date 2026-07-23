@@ -11,15 +11,11 @@ import { put, list } from '@vercel/blob';
 const BLOB_KEY = 'horas-sub-cliente/projects.json';
 
 async function readProjects() {
-  try {
-    const { blobs } = await list({ prefix: 'horas-sub-cliente/projects', limit: 1 });
-    if (!blobs.length) return [];
-    const res = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
+  const { blobs } = await list({ prefix: 'horas-sub-cliente/projects', limit: 1 });
+  if (!blobs.length) return [];
+  const res = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error(`No se pudo leer projects.json del blob (status ${res.status})`);
+  return await res.json();
 }
 
 async function writeProjects(arr) {
