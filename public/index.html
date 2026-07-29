@@ -141,13 +141,6 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 .welcome-banner p { font-size:13px; opacity:.82; }
 .logout-btn { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:6px; color:rgba(255,255,255,.8); font-size:12px; cursor:pointer; padding:5px 12px; font-family:'DM Sans',sans-serif; transition:.15s; display:none; }
 .logout-btn:hover { background:rgba(255,255,255,.2); }
-/* TIMER */
-.timer-btn { display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:8px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;white-space:nowrap; }
-.timer-btn:hover { background:rgba(255,255,255,.2); }
-.timer-btn.running { background:rgba(220,38,38,.22);border-color:rgba(248,113,113,.5); }
-.timer-dot { width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.6);flex-shrink:0; }
-.timer-btn.running .timer-dot { background:#f87171;animation:tdot 1s step-end infinite; }
-@keyframes tdot { 50%{ opacity:0; } }
 /* BILLABLE */
 .bill-toggle { display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:500;user-select:none;padding:4px 0; }
 .bill-toggle input[type="checkbox"] { width:15px;height:15px;accent-color:var(--success);cursor:pointer;flex-shrink:0; }
@@ -185,7 +178,6 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
     Registro de Horas
   </div>
   <div class="topbar-r">
-    <button id="timer-btn" class="timer-btn" onclick="toggleTimer()"><span class="timer-dot" id="timer-dot"></span><span id="timer-label">Iniciar timer</span></button>
     <div class="user-pill">
       <div class="av" id="av">--</div>
       <span id="av-name">Seleccioná usuario</span>
@@ -1489,84 +1481,6 @@ function getPeriodoHasta(){
   return document.getElementById('rango-hasta').value || fmtDate(new Date());
 }
 
-// ── TIMER EN VIVO ──
-var TIMER_KEY = 'humand-timer-cliente';
-var _timerInterval = null;
-
-function getTimerState(){
-  try{ return JSON.parse(localStorage.getItem(TIMER_KEY)||'null'); }catch(e){ return null; }
-}
-function saveTimerState(state){
-  if(state) localStorage.setItem(TIMER_KEY, JSON.stringify(state));
-  else localStorage.removeItem(TIMER_KEY);
-}
-
-function _startTimerUI(state){
-  var btn = document.getElementById('timer-btn');
-  if(btn) btn.classList.add('running');
-  if(_timerInterval) clearInterval(_timerInterval);
-  _timerInterval = setInterval(function(){
-    var elapsed = Date.now() - state.startTime;
-    var s = Math.floor(elapsed/1000), m = Math.floor(s/60), h = Math.floor(m/60);
-    s=s%60; m=m%60;
-    var label = (h ? h+'h ' : '') + String(m).padStart(2,'0') + 'm ' + String(s).padStart(2,'0') + 's';
-    var el = document.getElementById('timer-label');
-    if(el) el.textContent = label;
-  }, 1000);
-}
-
-function startTimer(){
-  var project = (document.getElementById('c-prj').value||'').trim();
-  var state = { startTime: Date.now(), project: project };
-  saveTimerState(state);
-  _startTimerUI(state);
-}
-
-function stopTimer(){
-  var state = getTimerState();
-  if(!state) return;
-  clearInterval(_timerInterval); _timerInterval = null;
-  saveTimerState(null);
-  var btn = document.getElementById('timer-btn');
-  if(btn) btn.classList.remove('running');
-  var el = document.getElementById('timer-label');
-  if(el) el.textContent = 'Iniciar timer';
-  // Pre-rellenar formulario
-  var startDate = new Date(state.startTime);
-  var endDate   = new Date();
-  var fromStr = String(startDate.getHours()).padStart(2,'0') + ':' + String(startDate.getMinutes()).padStart(2,'0');
-  var toStr   = String(endDate.getHours()).padStart(2,'0')   + ':' + String(endDate.getMinutes()).padStart(2,'0');
-  var dayStr  = startDate.getFullYear()+'-'+(String(startDate.getMonth()+1).padStart(2,'0'))+'-'+(String(startDate.getDate()).padStart(2,'0'));
-  var prjEl = document.getElementById('c-prj');
-  var fromEl= document.getElementById('c-from');
-  var toEl  = document.getElementById('c-to');
-  var dayEl = document.getElementById('c-day');
-  if(prjEl && !prjEl.value.trim() && state.project) prjEl.value = state.project;
-  if(fromEl) fromEl.value = fromStr;
-  if(toEl)   toEl.value   = toStr;
-  if(dayEl)  dayEl.value  = dayStr;
-  // En modo horas: calcular duración y pre-rellenar c-hours
-  if(MODO_CARGA==='horas'){
-    var durMin = Math.round((endDate - startDate)/60000);
-    var durHs  = Math.round(durMin/30)*0.5; // redondear al 0.5 más cercano
-    var hoursEl = document.getElementById('c-hours');
-    if(hoursEl && durHs>0) hoursEl.value = durHs;
-  }
-  var panelCarga = document.getElementById('panel-carga');
-  if(panelCarga && panelCarga.style.display !== 'none'){
-    setTimeout(function(){ fromEl && fromEl.scrollIntoView({behavior:'smooth',block:'center'}); }, 100);
-  }
-}
-
-function toggleTimer(){
-  if(getTimerState()) stopTimer();
-  else startTimer();
-}
-
-function initTimer(){
-  var state = getTimerState();
-  if(state) _startTimerUI(state);
-}
 
 // ── BILLABLE LABEL ──
 function updateBillLabel(){
@@ -1678,7 +1592,6 @@ if(_initSession){
 cargarSegmentos();
 cargarSupervisoresColab();
 updateSemanaLabel();
-initTimer();
 var _hoy = new Date();
 document.getElementById('rango-desde').value = fmtDate(_hoy);
 document.getElementById('rango-hasta').value = fmtDate(_hoy);
