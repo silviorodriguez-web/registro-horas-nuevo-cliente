@@ -786,7 +786,7 @@ function renderDropdownProyectos(filtered, q){
   managed.slice(0,10).forEach(function(p){
     managedNames[p.name.toLowerCase()] = true;
     var safeN = p.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    rows.push('<div style="padding:9px 12px;cursor:pointer;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between"'+
+    rows.push('<div data-proyid="'+p.id+'" style="padding:9px 12px;cursor:pointer;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between"'+
       ' onmousedown="seleccionarProyecto(\''+safeN+'\','+p.id+')"'+
       ' onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'\'">'+
       '<span style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:#059669;font-weight:700">●</span>'+p.name+'</span>'+
@@ -838,7 +838,17 @@ function navDropdownProyectos(e){
     if(active){ active.classList.remove('prj-focused'); active.style.background=''; }
     if(prev){ prev.classList.add('prj-focused'); prev.style.background='#eff6ff'; }
   } else if(e.key==='Enter'){
-    if(active){ e.preventDefault(); var txt=active.textContent.replace(/^\+\s*Usar\s*"/,'').replace(/"$/,'').trim(); seleccionarProyecto(txt); }
+    if(active){
+      e.preventDefault();
+      var pid=active.getAttribute('data-proyid');
+      if(pid){
+        var proy=_managedProjects.find(function(p){ return String(p.id)===pid; });
+        seleccionarProyecto(proy?proy.name:active.textContent.trim(), Number(pid));
+      } else {
+        var txt=active.textContent.replace(/^\+\s*Usar\s*"/,'').replace(/"$/,'').trim();
+        seleccionarProyecto(txt);
+      }
+    }
   } else if(e.key==='Escape'){
     dd.style.display='none';
   }
