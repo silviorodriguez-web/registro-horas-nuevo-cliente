@@ -482,6 +482,7 @@ function filteredRequests(){
   } else {
     filtered = requests.filter(function(r){ return r.supervisorId; });
   }
+  filtered = filtered.filter(function(r){ return r.status !== 'draft'; });
   if(!showArchived) filtered = filtered.filter(function(r){ return !r.archived; });
   if(filterDate){
     filtered = filtered.filter(function(r){ return r.submittedAt && r.submittedAt.slice(0,10)===filterDate; });
@@ -1621,7 +1622,7 @@ function clearRptFilter(){
 
 // Reportería: histórico completo, sin acotar por supervisor (a diferencia de filteredRequests())
 function reportesRequests(){
-  return requests.slice();
+  return requests.filter(function(r){ return r.status !== 'draft'; });
 }
 
 function renderReportesFiltersOptions(){
