@@ -819,6 +819,9 @@ function seleccionarProyecto(nombre, proyId){
   _currentProjectId = proyId || null;
   var msg = document.getElementById('prj-access-msg');
   if(msg) msg.style.display = 'none';
+  var proyecto = _managedProjects.find(function(p){ return p.id === proyId; });
+  var billEl = document.getElementById('c-bill');
+  if(billEl && proyecto){ billEl.checked = proyecto.billable !== false; updateBillLabel(); }
 }
 function navDropdownProyectos(e){
   var dd = document.getElementById('prj-dropdown');
