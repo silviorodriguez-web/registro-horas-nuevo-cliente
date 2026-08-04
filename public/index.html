@@ -905,7 +905,6 @@ function addEntry(){
   var bill = document.getElementById('c-bill').checked;
   if (!p) { alert('Escribí el nombre del proyecto o cliente'); return; }
   if (!d) { alert('Seleccioná un día'); return; }
-  if (d > todayStr()) { alert('No podés cargar horas para días futuros.\nSolo se permiten días de hoy o anteriores.'); return; }
   var pDesde = getPeriodoDesde(), pHasta = getPeriodoHasta();
   if (pDesde && d < pDesde) { alert('La fecha ' + d + ' es anterior al período seleccionado.\nEl período empieza el ' + pDesde + '.'); return; }
   if (pHasta && d > pHasta) { alert('La fecha ' + d + ' está fuera del período seleccionado.\nEl período finaliza el ' + pHasta + '.'); return; }
