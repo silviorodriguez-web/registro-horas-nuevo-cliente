@@ -142,8 +142,8 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 .logout-btn { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:6px; color:rgba(255,255,255,.8); font-size:12px; cursor:pointer; padding:5px 12px; font-family:'DM Sans',sans-serif; transition:.15s; display:none; }
 .logout-btn:hover { background:rgba(255,255,255,.2); }
 /* BILLABLE */
-.bill-toggle { display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;font-weight:500;user-select:none;padding:4px 0; }
-.bill-toggle input[type="checkbox"] { width:15px;height:15px;accent-color:var(--success);cursor:pointer;flex-shrink:0; }
+.bill-toggle { display:flex;align-items:center;gap:7px;cursor:default;font-size:13px;font-weight:500;user-select:none;padding:4px 0; }
+.bill-toggle input[type="checkbox"] { width:15px;height:15px;accent-color:var(--success);cursor:not-allowed;flex-shrink:0; pointer-events:none; }
 .bill-yes { color:var(--success); }
 .bill-no  { color:var(--muted); }
 /* HOURS MODE */
@@ -321,10 +321,10 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-          <label class="bill-toggle">
-            <input type="checkbox" id="c-bill" checked onchange="updateBillLabel()">
+          <label class="bill-toggle" title="La condición de facturable la define el administrador en la configuración del proyecto">
+            <input type="checkbox" id="c-bill" checked disabled>
             <span id="c-bill-label" class="bill-yes">● Facturable</span>
-            <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:2px">¿Son horas facturables al cliente?</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:2px">Definido por el proyecto — no editable</span>
           </label>
           <button class="btn btn-primary" onclick="addEntry()">+ Agregar entrada</button>
         </div>
