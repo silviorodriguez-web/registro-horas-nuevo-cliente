@@ -1207,10 +1207,9 @@ function exportExcel(){
 
   ensureProjectsLoaded(function(){
     // Hoja 1: Detalle completo — orden estilo Clockify
-    var detalleRows = [['Client','Project','Description','User','Email','Billable','Date','Duration (h)','Duration (decimal)','Date of creation','Estado','Aprobado por','Sync Humand TT']];
+    var detalleRows = [['Client','Project','Description','User','Email','Billable','Date','Duration (h)','Duration (decimal)','Date of creation','Estado','Aprobado por']];
     pairs.forEach(function(pair){
       var r = pair.r, e = pair.e;
-      var ttLabel = r.ttSynced===true ? 'Sí' : (r.ttSynced===false ? 'No' : 'N/A');
       var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
       detalleRows.push([
         clienteDeProyecto(e.project),
@@ -1224,8 +1223,7 @@ function exportExcel(){
         decHours,
         r.submittedAt ? r.submittedAt.slice(0,10) : '',
         r.status==='approved' ? 'Aprobado' : (r.status==='pending' ? 'Pendiente' : r.status),
-        r.approvedBy||'',
-        ttLabel
+        r.approvedBy||''
       ]);
     });
 

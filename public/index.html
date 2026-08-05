@@ -189,7 +189,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 <div class="main">
   <div class="page-hd">
     <h1>Carga semanal de horas</h1>
-    <p>Completá tus entradas y enviá tus horas directamente a Humand Time Tracking.</p>
+    <p>Completá tus entradas y enviá tus horas — quedan aprobadas al instante, sin pasos adicionales.</p>
   </div>
 
   <!-- Bienvenida post-login -->
@@ -347,7 +347,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       <div class="action-bar">
         <button class="btn" id="btn-guardar-borrador" onclick="guardarBorrador()">Guardar borrador</button>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button id="btn-submit-direct" class="btn btn-direct" onclick="submitDirect()" title="Registra directamente en Humand Time Tracking sin pasar por aprobación del supervisor">⚡ Enviar directo a Humand</button>
+          <button id="btn-submit-direct" class="btn btn-direct" onclick="submitDirect()" title="Envía tus horas y quedan aprobadas al instante, sin pasar por aprobación del supervisor">⚡ Enviar directo a Humand</button>
         </div>
       </div>
     </div>
@@ -357,7 +357,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
       <div class="success-block">
         <div class="check">✓</div>
         <h3>Registro enviado correctamente</h3>
-        <p>Tus horas fueron registradas en Humand Time Tracking.<br>
+        <p>Tus horas fueron registradas y quedaron aprobadas.<br>
         No requieren aprobación del supervisor.</p>
         <div class="ticket-box">
           <div class="ticket-id" id="t-id">ARCHIVO #HRS-2025-W15</div>
@@ -1255,14 +1255,25 @@ function editarEnvio(id){
   if(!envio) return;
   if(!confirm('Vas a reabrir este envío para editarlo.\nEl registro actual ("'+envio.periodo+'") se va a quitar de "Mis envíos anteriores" y sus entradas van a cargarse en el formulario para que las corrijas y las vuelvas a enviar.\n\n¿Continuar?')) return;
   if(colabEntries.length && !confirm('Ya tenés entradas cargadas en el formulario. ¿Reemplazarlas por las de este envío?')) return;
-  colabEntries = envio.entries.map(function(e){ return Object.assign({}, e); });
-  colabNextId  = colabEntries.length + 1;
-  renderColabList();
-  fetch('/api/submissions?id='+id, {method:'DELETE'}).catch(function(){});
-  var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]').filter(function(s){ return s.id !== id; });
-  localStorage.setItem(LS_KEY, JSON.stringify(prev));
-  renderMisEnvios();
-  document.getElementById('colab-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+  // Borramos primero el envío original en el servidor y solo si eso se confirma
+  // habilitamos la carga en el formulario. Así, cuando vuelva a enviarse ya
+  // corregido, el reporte del administrador queda con un único registro (el
+  // corregido) y no con el viejo + el nuevo duplicados.
+  var btnWasDisabled = false;
+  fetch('/api/submissions?id='+id, {method:'DELETE'})
+    .then(function(r){ if(!r.ok && r.status!==404) throw new Error('status '+r.status); })
+    .then(function(){
+      colabEntries = envio.entries.map(function(e){ return Object.assign({}, e); });
+      colabNextId  = colabEntries.length + 1;
+      renderColabList();
+      var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]').filter(function(s){ return s.id !== id; });
+      localStorage.setItem(LS_KEY, JSON.stringify(prev));
+      renderMisEnvios();
+      document.getElementById('colab-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+    })
+    .catch(function(err){
+      alert('No se pudo reabrir el envío para editar (no se logró quitarlo del servidor): '+err.message+'\nProbá de nuevo en unos segundos para evitar que quede duplicado.');
+    });
 }
 
 function eliminarEnvio(id){
@@ -1278,15 +1289,19 @@ function eliminarEnvio(id){
     });
 }
 
-// ── ENVÍO DIRECTO A HUMAND (P2 — sin revisión del supervisor) ──
+// ── ENVÍO DIRECTO (P2 — sin revisión del supervisor) ──
+// Nota: este proyecto NO escribe en el módulo de Control Horario / Time
+// Tracking de Humand (no se llama a clockIn/clockOut). Los registros se
+// guardan en nuestra base propia y, opcionalmente, como archivo en Humand
+// Files. Por eso acá no hay intento de sincronización con Time Tracking
+// ni ningún cartel de error relacionado con eso.
 function submitDirect(){
   if (!currentUser) { alert('Seleccioná tu usuario primero'); return; }
   if (!colabEntries.length) { alert('Agregá al menos una entrada'); return; }
-  if (!confirm('Vas a enviar tus horas directamente a Humand Time Tracking.\n⚡ No requiere aprobación del supervisor.\n\n¿Confirmar?')) return;
+  if (!confirm('Vas a enviar tus horas.\n⚡ No requiere aprobación del supervisor.\n\n¿Confirmar?')) return;
   var tot      = totalH(colabEntries);
   var nombre   = currentUser.firstName+' '+currentUser.lastName;
   var periodo  = getPeriodoLabel();
-  var withTimes = synthesizeTimes(colabEntries);
   var submission = {
     employeeId:         currentUser.id,
     employeeInternalId: currentUser.employeeInternalId,
@@ -1304,25 +1319,7 @@ function submitDirect(){
   var fileName = 'horas-directo-'+submission.periodoDesde+'-'+submission.periodoHasta+'-'+currentUser.id+'.pdf';
   var btn = document.getElementById('btn-submit-direct');
   if(btn){ btn.innerHTML='<span class="spinner"></span>Enviando...'; btn.disabled=true; }
-  var empId = String(currentUser.id);
-  var DUPLICATE = 'TIME_TRACKING_ENTRY_DUPLICATE';
-  function sendEntry(i){
-    if(i>=withTimes.length) return Promise.resolve();
-    var e = withTimes[i];
-    var cmt = (e.project+(e.desc?' — '+e.desc:'')).substring(0,150);
-    return apiCall('/time-tracking/entries/clockIn',null,'POST',{employeeId:empId,now:toISOLocal(e.day,e.from),comment:cmt})
-      .then(function(res){
-        if(res&&res.code===DUPLICATE) return Promise.resolve();
-        if(!res||!res.id) throw new Error('clockIn falló (entrada '+(i+1)+')');
-        return apiCall('/time-tracking/entries/clockOut',null,'POST',{employeeId:empId,now:toISOLocal(e.day,e.to),comment:cmt+' | Directo'});
-      })
-      .then(function(){ return sendEntry(i+1); });
-  }
-  var _ttSynced = false, _ttError = null;
-  sendEntry(0)
-    .then(function(){ _ttSynced = true; })
-    .catch(function(err){ console.warn('[directo] Humand TT error:', err.message); _ttSynced = false; _ttError = err.message; })
-    .then(function(){ return guardarEnFiles(submission, fileName); })
+  guardarEnFiles(submission, fileName)
     .then(function(fileId){
       var sub = {
         id:          Date.now(),
@@ -1340,7 +1337,6 @@ function submitDirect(){
         submittedAt: submission.submittedAt,
         status:      'approved',
         approvedBy:  'Carga directa',
-        ttSynced:    _ttSynced,
         comment:     '',
         modified:    false,
         entries:     submission.entries
@@ -1348,7 +1344,6 @@ function submitDirect(){
       var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
       prev.unshift(sub);
       localStorage.setItem(LS_KEY, JSON.stringify(prev));
-      if(_ttError) console.warn('[directo] Humand TT no sincronizado (silencioso para el usuario):', _ttError);
       // Esperamos a que el guardado en el servidor termine antes de refrescar
       // "Mis envíos anteriores" — si no, la lista se recarga con el dato viejo
       // y el envío recién hecho no aparece todavía como Aprobado.
@@ -1365,10 +1360,6 @@ function submitDirect(){
           sucEl.style.display='block';
           sucEl.scrollIntoView({behavior:'smooth'});
           var h3 = sucEl.querySelector('h3'), pp = sucEl.querySelector('p');
-          // El usuario siempre ve esto como aprobado y enviado — la sincronización
-          // con Humand Time Tracking es una cuestión interna que se resuelve del
-          // lado de Gestión Humana (ver ttSynced en el panel de admin), no algo
-          // que el colaborador deba saber ni resolver.
           if(h3) h3.textContent = 'Horas registradas';
           if(pp)  pp.innerHTML  = 'Tus horas fueron enviadas y quedaron aprobadas.<br>No requieren aprobación del supervisor.';
           if(btn){ btn.innerHTML='⚡ Enviar directo a Humand'; btn.disabled=false; }
