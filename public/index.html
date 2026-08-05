@@ -683,6 +683,14 @@ function renderMisEnvios(){
           ? '<div class="alert-warn-inline">↩ Comentario del supervisor: '+s.comment+'</div>' : '';
         var continuar = s.status==='draft'
           ? '<button class="btn btn-sm" style="margin-top:6px" onclick="continuarBorrador('+s.id+')">Continuar editando</button>' : '';
+        // Autogestión: como no hay flujo de aprobación de supervisor, el colaborador
+        // puede reabrir para editar o eliminar cualquier envío ya aprobado/enviado.
+        var acciones = (s.status==='approved'||s.status==='returned')
+          ? '<button class="btn btn-sm" style="margin-top:6px" onclick="editarEnvio('+s.id+')">Editar</button>'
+          + '<button class="btn btn-sm" style="margin-top:6px;margin-left:6px;color:var(--danger,#dc2626)" onclick="eliminarEnvio('+s.id+')">Eliminar</button>'
+          : (s.status==='draft'
+            ? '<button class="btn btn-sm" style="margin-top:6px;margin-left:6px;color:var(--danger,#dc2626)" onclick="eliminarEnvio('+s.id+')">Eliminar</button>'
+            : '');
         return '<div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">' +
           '<div style="flex:1">' +
             '<div style="font-weight:600;font-size:13px">'+s.periodo+'</div>' +
@@ -691,6 +699,7 @@ function renderMisEnvios(){
             buildProyectosResumen(s.entries)+
             ret+
             continuar+
+            acciones+
           '</div>' +
           '<span class="badge '+statusClass(s.status)+'">'+statusLabel(s.status)+'</span>'+
         '</div>';
@@ -1238,6 +1247,37 @@ function continuarBorrador(id){
   document.getElementById('colab-list').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
+// ── AUTOGESTIÓN: reabrir un envío ya aprobado/enviado para corregirlo ──
+// Como no hay flujo de aprobación de supervisor, el colaborador puede
+// editar o eliminar por su cuenta lo que ya cargó.
+function editarEnvio(id){
+  var envio = _misEnviosCache.find(function(s){ return s.id === id; });
+  if(!envio) return;
+  if(!confirm('Vas a reabrir este envío para editarlo.\nEl registro actual ("'+envio.periodo+'") se va a quitar de "Mis envíos anteriores" y sus entradas van a cargarse en el formulario para que las corrijas y las vuelvas a enviar.\n\n¿Continuar?')) return;
+  if(colabEntries.length && !confirm('Ya tenés entradas cargadas en el formulario. ¿Reemplazarlas por las de este envío?')) return;
+  colabEntries = envio.entries.map(function(e){ return Object.assign({}, e); });
+  colabNextId  = colabEntries.length + 1;
+  renderColabList();
+  fetch('/api/submissions?id='+id, {method:'DELETE'}).catch(function(){});
+  var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]').filter(function(s){ return s.id !== id; });
+  localStorage.setItem(LS_KEY, JSON.stringify(prev));
+  renderMisEnvios();
+  document.getElementById('colab-list').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function eliminarEnvio(id){
+  var envio = _misEnviosCache.find(function(s){ return s.id === id; });
+  if(!envio) return;
+  if(!confirm('¿Eliminar definitivamente este envío ("'+envio.periodo+'")?\nEsta acción no se puede deshacer.')) return;
+  fetch('/api/submissions?id='+id, {method:'DELETE'})
+    .catch(function(){})
+    .then(function(){
+      var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]').filter(function(s){ return s.id !== id; });
+      localStorage.setItem(LS_KEY, JSON.stringify(prev));
+      renderMisEnvios();
+    });
+}
+
 // ── ENVÍO DIRECTO A HUMAND (P2 — sin revisión del supervisor) ──
 function submitDirect(){
   if (!currentUser) { alert('Seleccioná tu usuario primero'); return; }
@@ -1308,26 +1348,31 @@ function submitDirect(){
       var prev = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
       prev.unshift(sub);
       localStorage.setItem(LS_KEY, JSON.stringify(prev));
-      fetch('/api/submissions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)}).catch(function(){});
-      document.getElementById('t-title').textContent   = periodo+' · '+nombre;
-      document.getElementById('t-total').textContent   = fmtMin(totalMin(colabEntries));
-      document.getElementById('t-date').textContent    = nowStr();
-      document.getElementById('t-entries').textContent = colabEntries.length+' entradas';
-      document.getElementById('t-id').textContent      = 'FILE ID: '+fileId;
-      colabEntries=[]; renderColabList(); renderMisEnvios();
-      var sucEl = document.getElementById('c-success');
-      sucEl.style.display='block';
-      sucEl.scrollIntoView({behavior:'smooth'});
-      var h3 = sucEl.querySelector('h3'), pp = sucEl.querySelector('p');
-      if(_ttSynced){
-        if(h3) h3.textContent = 'Horas registradas en Humand';
-        if(pp)  pp.innerHTML  = 'Tus horas fueron enviadas directamente al módulo de Time Tracking.<br>No requieren aprobación del supervisor.';
-      } else {
-        if(h3) h3.textContent = '⚠ Registradas, pero no sincronizadas con Humand';
-        if(pp)  pp.innerHTML  = 'Tus horas quedaron guardadas, pero hubo un error al registrarlas en Humand Time Tracking.<br>Avisá al administrador para que las sincronice manualmente.';
-        alert('Atención: no se pudo registrar en Humand Time Tracking (' + _ttError + ').\nEl administrador deberá sincronizarlas manualmente.');
-      }
-      if(btn){ btn.innerHTML='⚡ Enviar directo a Humand'; btn.disabled=false; }
+      if(_ttError) console.warn('[directo] Humand TT no sincronizado (silencioso para el usuario):', _ttError);
+      // Esperamos a que el guardado en el servidor termine antes de refrescar
+      // "Mis envíos anteriores" — si no, la lista se recarga con el dato viejo
+      // y el envío recién hecho no aparece todavía como Aprobado.
+      return fetch('/api/submissions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sub)})
+        .catch(function(){})
+        .then(function(){
+          document.getElementById('t-title').textContent   = periodo+' · '+nombre;
+          document.getElementById('t-total').textContent   = fmtMin(totalMin(colabEntries));
+          document.getElementById('t-date').textContent    = nowStr();
+          document.getElementById('t-entries').textContent = colabEntries.length+' entradas';
+          document.getElementById('t-id').textContent      = 'FILE ID: '+fileId;
+          colabEntries=[]; renderColabList(); renderMisEnvios();
+          var sucEl = document.getElementById('c-success');
+          sucEl.style.display='block';
+          sucEl.scrollIntoView({behavior:'smooth'});
+          var h3 = sucEl.querySelector('h3'), pp = sucEl.querySelector('p');
+          // El usuario siempre ve esto como aprobado y enviado — la sincronización
+          // con Humand Time Tracking es una cuestión interna que se resuelve del
+          // lado de Gestión Humana (ver ttSynced en el panel de admin), no algo
+          // que el colaborador deba saber ni resolver.
+          if(h3) h3.textContent = 'Horas registradas';
+          if(pp)  pp.innerHTML  = 'Tus horas fueron enviadas y quedaron aprobadas.<br>No requieren aprobación del supervisor.';
+          if(btn){ btn.innerHTML='⚡ Enviar directo a Humand'; btn.disabled=false; }
+        });
     })
     .catch(function(err){
       alert('Error al registrar: '+err.message);
