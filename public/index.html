@@ -857,6 +857,10 @@ function navDropdownProyectos(e){
 
 // ── VALIDACIONES DE NEGOCIO ──
 var GRACE_DAYS_LIQUIDACION = 3;
+// Corte con la herramienta anterior: el cliente cerró esa herramienta al 30/6,
+// por lo que en esta hay horas para cargar desde el 01/7 en adelante.
+// Nunca bloquear por cierre de período automático a partir de esta fecha.
+var FECHA_MINIMA_CARGA = '2026-07-01';
 
 function timeToMin(t) {
   var p = (t || '').split(':');
@@ -887,6 +891,7 @@ function getLiquidacionPeriodo(dateStr) {
 }
 
 function isPeriodoCerrado(dateStr) {
+  if (dateStr >= FECHA_MINIMA_CARGA) return false;
   var p = getLiquidacionPeriodo(dateStr);
   var hoy = new Date(); hoy.setHours(0,0,0,0);
   var cierre = new Date(p.hasta + 'T12:00:00');
