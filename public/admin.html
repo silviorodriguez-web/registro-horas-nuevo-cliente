@@ -1131,10 +1131,31 @@ function decToHM(dec){
 }
 
 // ── EXPORT FORMATO NÓMINA (PF_PlantillaRegTiempos) ──
+// Formato ISO 8601 (AAAA-MM-DD): es el único formato de fecha que no se
+// presta a ambigüedad día/mes al importarse en otro sistema (SAW, Excel, etc.),
+// ya que el año va primero con 4 dígitos y nadie lo reinterpreta como MM-DD-AAAA.
 function fechaDDMMAAAA(dayStr){
-  if(!dayStr) return '';
-  var p = dayStr.split('-');
-  return p.length===3 ? (p[2]+'/'+p[1]+'/'+p[0]) : dayStr;
+  return dayStr || '';
+}
+
+// Trae de Humand el campo dinámico "Nro. de legajo" cargado en cada perfil,
+// paginando /users (máx. 50 por página según la API). Devuelve un mapa
+// email (lowercase) -> legajo.
+function fetchLegajosDeHumand(){
+  var mapa = {};
+  function pagina(p){
+    return apiCall('/users', { limit: 50, page: p }).then(function(res){
+      var users = (res && res.users) ? res.users : [];
+      users.forEach(function(u){
+        var email = (u.email || u.employeeInternalId || '').toLowerCase();
+        if(!email) return;
+        var campo = (u.fields || []).find(function(f){ return f.name === 'Nro. de legajo'; });
+        if(campo && campo.value != null && String(campo.value).trim()!=='') mapa[email] = String(campo.value);
+      });
+      if(users.length === 50) return pagina(p+1);
+    });
+  }
+  return pagina(1).then(function(){ return mapa; }).catch(function(){ return mapa; });
 }
 
 function exportPF(){
@@ -1142,8 +1163,15 @@ function exportPF(){
   if(!pairs.length){ alert('No hay datos para exportar con los filtros actuales.'); return; }
 
   ensureProjectsLoaded(function(){
-    fetch('/api/legajos').then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(legajos){
-      legajos = legajos && typeof legajos==='object' ? legajos : {};
+    Promise.all([
+      fetch('/api/legajos').then(function(r){ return r.json(); }).catch(function(){ return {}; }),
+      fetchLegajosDeHumand()
+    ]).then(function(res){
+      // Prioridad: legajo cargado manualmente en el panel (por si hace falta pisar
+      // algún caso puntual) y, si no hay, el campo dinámico "Nro. de legajo" de Humand.
+      var legajosManual = res[0] && typeof res[0]==='object' ? res[0] : {};
+      var legajosHumand = res[1] || {};
+      var legajos = Object.assign({}, legajosHumand, legajosManual);
       var sinLegajo = {};
       var header = ['T','NOMBRE_PERSONAL','*LEGAJO_PERSONAL','*FECHA','CLIENTE','NOMBRE CLIENTE','*CONTRATO-DIVISION','NOMBRE DIVISION','*CONTRATO-TIPO','NOMBRE TIPO','*CONTRATO-NUMERO','NOMBRE CONTRATO','*TAREA','NOMBRE TAREA','*TIEMPO','OBSERVACIONES','CATEGORIA'];
       var rows = [header];
