@@ -1419,7 +1419,11 @@ function seleccionarProyectoAsignado(sel){
   setTimeout(function(){ sel.value=''; }, 50);
 }
 
-// Bloquea/desbloquea el campo Proyecto/Cliente cuando se trajo el valor desde el desplegable
+// Bloquea el campo Proyecto/Cliente cuando se trajo el valor desde "Mis proyectos
+// asignados": queda de solo lectura y sin opción de reescribirlo a mano, para que
+// un colaborador con proyectos asignados no pueda cargar horas contra un proyecto
+// distinto al elegido. Si se equivocó, puede volver a elegir otro de la lista de
+// asignados (eso sí sigue funcionando) o borrar la entrada y cargarla de nuevo.
 function setProyectoLocked(locked){
   var el = document.getElementById('c-prj');
   if(!el) return;
@@ -1427,25 +1431,6 @@ function setProyectoLocked(locked){
   el.style.background = locked ? '#F3F4F6' : '';
   el.style.color      = locked ? '#6B7280' : '';
   el.style.cursor     = locked ? 'not-allowed' : '';
-  var btn = document.getElementById('c-prj-unlock-btn');
-  if(locked){
-    if(!btn){
-      btn = document.createElement('button');
-      btn.type = 'button';
-      btn.id = 'c-prj-unlock-btn';
-      btn.textContent = '✕ Cambiar proyecto';
-      btn.style.cssText = 'margin-top:5px;font-size:11px;background:none;border:none;color:#3B5FBF;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;display:block';
-      btn.onclick = function(){
-        document.getElementById('c-prj').value = '';
-        _currentProjectId = null;
-        setProyectoLocked(false);
-        document.getElementById('c-prj').focus();
-      };
-      el.parentElement.appendChild(btn);
-    }
-  } else if(btn){
-    btn.remove();
-  }
 }
 
 // ── PERÍODO ──
