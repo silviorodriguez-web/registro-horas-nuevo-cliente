@@ -301,7 +301,7 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       <label>Usuario</label>
       <input type="text" class="filter-inp" id="rpt-usuario" placeholder="Nombre o email..." oninput="renderReportes()" style="min-width:170px">
       <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtros</button>
-      <button class="btn btn-sm" onclick="exportPF()" style="font-size:11px;padding:4px 12px;background:#fff;color:var(--brand-d);border-color:var(--brand-d);margin-left:auto" title="Genera un Excel en el formato de nómina de IMR (PF_PlantillaRegTiempos)">⬇ Exportar formato nómina (Excel)</button>
+      <button class="btn btn-sm" onclick="exportPF()" style="font-size:11px;padding:4px 12px;background:#fff;color:var(--brand-d);border-color:var(--brand-d);margin-left:auto" title="Genera el .csv listo para importar en SAW (PF_PlantillaRegTiempos), sin pasar por Excel">⬇ Exportar formato nómina (CSV)</button>
       <button class="btn btn-sm" onclick="exportExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669">⬇ Exportar Excel</button>
     </div>
     <div id="rpt-content"><div class="rpt-empty">Cargando reportes...</div></div>
@@ -1131,11 +1131,36 @@ function decToHM(dec){
 }
 
 // ── EXPORT FORMATO NÓMINA (PF_PlantillaRegTiempos) ──
-// Formato ISO 8601 (AAAA-MM-DD): es el único formato de fecha que no se
-// presta a ambigüedad día/mes al importarse en otro sistema (SAW, Excel, etc.),
-// ya que el año va primero con 4 dígitos y nadie lo reinterpreta como MM-DD-AAAA.
+// SAW exige la fecha en formato DD/MM/AAAA (así lo documenta su propia plantilla
+// de importación: "Alfanumérico;Alfanumérico;DD/MM/AAAA;..."). e.day llega en
+// formato interno AAAA-MM-DD; acá se convierte a texto literal DD/MM/AAAA.
 function fechaDDMMAAAA(dayStr){
-  return dayStr || '';
+  if(!dayStr) return '';
+  var m = String(dayStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return String(dayStr);
+  return m[3] + '/' + m[2] + '/' + m[1];
+}
+
+// Convierte un string JS a bytes UTF-16LE con BOM, tal como los genera/espera
+// SAW en su plantilla de importación (PF_PlantillaRegTiempos.csv). Esto evita
+// pasar por Excel (abrir el .xlsx y "Guardar como CSV"), que es el paso donde
+// la fecha se reinterpreta según la configuración regional de cada PC y termina
+// invirtiendo día/mes o rompiendo el formato antes de llegar a SAW.
+function toUtf16LEBytes(str){
+  var buf = new Uint8Array(2 + str.length * 2);
+  buf[0] = 0xFF; buf[1] = 0xFE; // BOM little-endian
+  for(var i = 0; i < str.length; i++){
+    var code = str.charCodeAt(i);
+    buf[2 + i*2]     = code & 0xFF;
+    buf[2 + i*2 + 1] = (code >> 8) & 0xFF;
+  }
+  return buf;
+}
+
+// Sanea un valor para que no rompa el delimitado por ';' ni introduzca saltos
+// de línea dentro de una fila del CSV.
+function csvSafe(v){
+  return String(v == null ? '' : v).replace(/[;\r\n]/g, ' ').trim();
 }
 
 // Trae de Humand el campo dinámico "Nro. de legajo" cargado en cada perfil,
@@ -1173,8 +1198,24 @@ function exportPF(){
       var legajosHumand = res[1] || {};
       var legajos = Object.assign({}, legajosHumand, legajosManual);
       var sinLegajo = {};
-      var header = ['T','NOMBRE_PERSONAL','*LEGAJO_PERSONAL','*FECHA','CLIENTE','NOMBRE CLIENTE','*CONTRATO-DIVISION','NOMBRE DIVISION','*CONTRATO-TIPO','NOMBRE TIPO','*CONTRATO-NUMERO','NOMBRE CONTRATO','*TAREA','NOMBRE TAREA','*TIEMPO','OBSERVACIONES','CATEGORIA'];
-      var rows = [header];
+
+      // Generamos el .csv final tal como lo espera SAW (separador ';', UTF-16LE
+      // con BOM, fecha DD/MM/AAAA como texto literal) para no depender de que
+      // alguien abra el archivo en Excel y lo "Guarde como CSV" — ese paso
+      // intermedio es el que reinterpreta/invierte la fecha según la
+      // configuración regional de cada PC.
+      var lines = [];
+      lines.push('SEP=;');
+      lines.push('#;Tipo de registro:');
+      lines.push('#;  Comentarios (#)');
+      lines.push('#;  Titulo de columna (T)');
+      lines.push('#;  Fila de datos (D)');
+      lines.push('#;(*) Datos de la fila que deben ser completados con carácter obligatorio');
+      lines.push('#;');
+      lines.push("#;POR FAVOR, SI CARGA DATOS NUMÉRICOS, VERIFIQUE QUE LA COLUMNA TENGA FORMATO 'TEXTO/TEXT'");
+      lines.push('#;');
+      lines.push('#;Alfanumérico;Alfanumérico;DD/MM/AAAA;Numérico;Alfanumérico;Indefinido;Alfanumérico;Alfanumérico;Alfanumérico;Numérico;Alfanumérico;Alfanumérico;Alfanumérico;HH/MM;Alfanumérico;Alfanumérico');
+      lines.push('T;NOMBRE_PERSONAL;*LEGAJO_PERSONAL;*FECHA;CLIENTE;NOMBRE CLIENTE;*CONTRATO-DIVISION;NOMBRE DIVISION;*CONTRATO-TIPO;NOMBRE TIPO;*CONTRATO-NUMERO;NOMBRE CONTRATO;*TAREA;NOMBRE TAREA;*TIEMPO;OBSERVACIONES;CATEGORIA');
 
       pairs.forEach(function(pair){
         var r = pair.r, e = pair.e;
@@ -1183,43 +1224,40 @@ function exportPF(){
         var legajo = legajos[email] || '';
         if(!legajo) sinLegajo[r.employeeName] = true;
         var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-        // Todos los valores como string: la plantilla del cliente pide explícitamente
-        // que las columnas numéricas (legajo, número de contrato) queden en formato TEXTO
-        // para no perder ceros a la izquierda ni que Excel las reinterprete.
         var row = [
           'D',
-          String((r.employeeName||'').trim().replace(/\s+/g,'_')),
-          String(legajo),
-          String(fechaDDMMAAAA(e.day)),
-          String(proj ? (proj.clientCode||'') : ''),
-          String(proj ? (proj.client||'') : ''),
-          String(proj ? (proj.division||'') : ''),
+          csvSafe((r.employeeName||'').trim().replace(/\s+/g,'_')),
+          csvSafe(legajo),
+          csvSafe(fechaDDMMAAAA(e.day)),
+          csvSafe(proj ? (proj.clientCode||'') : ''),
+          csvSafe(proj ? (proj.client||'') : ''),
+          csvSafe(proj ? (proj.division||'') : ''),
           '',
-          String(proj ? (proj.contractType||'') : ''),
+          csvSafe(proj ? (proj.contractType||'') : ''),
           '',
-          String(proj ? proj.id : (e.projectId||'')),
-          String(e.project||''),
+          csvSafe(proj ? proj.id : (e.projectId||'')),
+          csvSafe(e.project||''),
           'HP',
           '',
-          String(decToHM(decHours)),
-          String(e.desc||''),
+          csvSafe(decToHM(decHours)),
+          csvSafe(e.desc||''),
           ''
         ];
-        rows.push(row);
+        lines.push(row.join(';'));
       });
 
-      var ws = XLSX.utils.aoa_to_sheet(rows);
-      // Forzar tipo texto ('s') en todas las celdas para que Excel no reinterprete
-      // legajos, IDs de contrato o fechas como números/fechas nativas.
-      Object.keys(ws).forEach(function(cellRef){
-        if(cellRef[0] === '!') return;
-        var cell = ws[cellRef];
-        if(cell && cell.v != null){ cell.t = 's'; cell.v = String(cell.v); }
-      });
-      var wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'RegTiempos');
+      var csvContent = lines.join('\r\n') + '\r\n';
+      var bytes = toUtf16LEBytes(csvContent);
+      var blob = new Blob([bytes], { type: 'text/csv;charset=utf-16le' });
       var desde = document.getElementById('rpt-desde').value;
-      XLSX.writeFile(wb, 'PF_RegTiempos_'+(desde||'export')+'.xlsx');
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'PF_RegTiempos_'+(desde||'export')+'.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       var faltantes = Object.keys(sinLegajo);
       if(faltantes.length){
