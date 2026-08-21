@@ -1150,21 +1150,20 @@ function decToHM(dec){
 }
 
 // ── EXPORT FORMATO NÓMINA (PF_PlantillaRegTiempos) ──
-// La propia plantilla de SAW documenta la columna FECHA como "DD/MM/AAAA",
-// pero probando con datos reales se vio que su importador en realidad LEE la
-// columna como MM/DD/AAAA (mes primero), sin importar lo que dice su
-// documentación: con día/mes en formato DD/MM, los días ≤12 se "colaban" pero
-// tomando el mes equivocado (10/08 = 10 de agosto se leía como día 08 del mes
-// 10 = 8 de octubre), y los días >12 quedaban directamente rechazados por
-// "mes inválido" (13, 14... no son meses). Por eso acá se manda MM/DD/AAAA
-// —a pesar de lo que dice el texto de la plantilla— para que el importador de
-// SAW lo interprete como la fecha real. e.day llega en formato interno
-// AAAA-MM-DD.
+// SAW exige la fecha en formato DD/MM/AAAA (así lo documenta su propia
+// plantilla, y así lo confirmó el cliente probando con datos reales: aunque
+// la pantalla de carga de SAW la MUESTRA invertida, al procesar el archivo la
+// toma bien como DD/MM/AAAA — es sólo un tema de visualización de SAW, no del
+// dato real). Se probó mandarla como MM/DD/AAAA pensando que SAW la leía al
+// revés, pero con ese formato SAW directamente no reconoce ninguna fila
+// ("invertida no la acepta") — confirma que DD/MM/AAAA es lo correcto.
+// e.day llega en formato interno AAAA-MM-DD; acá se convierte a texto
+// literal DD/MM/AAAA.
 function fechaDDMMAAAA(dayStr){
   if(!dayStr) return '';
   var m = String(dayStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!m) return String(dayStr);
-  return m[2] + '/' + m[3] + '/' + m[1];
+  return m[3] + '/' + m[2] + '/' + m[1];
 }
 
 // Sanea un valor para que no rompa el delimitado por ';' ni introduzca saltos
@@ -1334,7 +1333,7 @@ function mostrarPreviewPF(rows, faltantes, bytes, filename){
       '<thead style="position:sticky;top:0;background:var(--brand-l)"><tr>'+
         '<th style="padding:6px 10px;text-align:left">Colaborador</th>'+
         '<th style="padding:6px 10px;text-align:left">Legajo</th>'+
-        '<th style="padding:6px 10px;text-align:left">FECHA (MM/DD/AAAA, así lo lee SAW)</th>'+
+        '<th style="padding:6px 10px;text-align:left">FECHA (va al .csv)</th>'+
         '<th style="padding:6px 10px;text-align:left">Control (calculado aparte)</th>'+
         '<th style="padding:6px 10px;text-align:left">Cliente</th>'+
         '<th style="padding:6px 10px;text-align:left">Tipo de contrato</th>'+
@@ -1342,7 +1341,7 @@ function mostrarPreviewPF(rows, faltantes, bytes, filename){
         '<th style="padding:6px 10px;text-align:right">Tiempo</th>'+
       '</tr></thead><tbody>'+trs+'</tbody></table></div>'+
     '<p style="font-size:11px;color:var(--err);font-weight:600;margin-top:10px">⚠ Importante: subí este .csv TAL CUAL a SAW, sin abrirlo en Excel ni "guardarlo como CSV" desde ahí. Ese paso intermedio es el que reinterpreta la fecha según la configuración regional de la PC y la vuelve a romper — el archivo ya sale listo para subir directo.</p>'+
-    '<p style="font-size:11px;color:var(--muted);margin-top:6px">La columna FECHA ahora se manda como MM/DD/AAAA (mes/día/año) en vez de DD/MM/AAAA: probamos con datos reales que el importador de SAW lee la fecha así, aunque su propia plantilla diga lo contrario — con DD/MM tomaba el mes equivocado en los días ≤12 y rechazaba directamente los días >12.</p>'+
+    '<p style="font-size:11px;color:var(--muted);margin-top:6px">La columna FECHA va como DD/MM/AAAA. La pantalla de carga de SAW puede mostrarla invertida (es un tema de visualización de SAW), pero al procesar el archivo la toma bien.</p>'+
     '<p style="font-size:11px;color:var(--muted);margin-top:6px">Usá esta vista previa (columna FECHA vs. Control) para confirmar que el día y el mes son correctos antes de descargarlo.</p>';
   document.getElementById('pf-preview-overlay').style.display = 'flex';
 }
