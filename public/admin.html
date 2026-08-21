@@ -317,7 +317,8 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       <div id="pf-preview-body" style="padding:16px 20px;overflow:auto"></div>
       <div class="action-bar">
         <button class="btn btn-sm" onclick="cerrarPreviewPF()">Cancelar</button>
-        <button class="btn btn-sm" onclick="confirmarDescargaPF()" style="background:var(--brand);color:#fff;border-color:var(--brand)">⬇ Descargar CSV</button>
+        <button class="btn btn-sm" onclick="confirmarDescargaExcelPF()" title="Sólo para revisar/corregir algo a mano — las columnas ya están en formato Texto para que no se rompan si lo volvés a guardar como CSV">⬇ Excel de respaldo</button>
+        <button class="btn btn-sm" onclick="confirmarDescargaPF()" style="background:var(--brand);color:#fff;border-color:var(--brand)">⬇ Descargar CSV (subir a SAW)</button>
       </div>
     </div>
   </div>
@@ -1245,6 +1246,21 @@ function exportPF(){
       lines.push('#;Alfanumérico;Alfanumérico;DD/MM/AAAA;Numérico;Alfanumérico;Indefinido;Alfanumérico;Alfanumérico;Alfanumérico;Numérico;Alfanumérico;Alfanumérico;Alfanumérico;HH/MM;Alfanumérico;Alfanumérico');
       lines.push('T;NOMBRE_PERSONAL;*LEGAJO_PERSONAL;*FECHA;CLIENTE;NOMBRE CLIENTE;*CONTRATO-DIVISION;NOMBRE DIVISION;*CONTRATO-TIPO;NOMBRE TIPO;*CONTRATO-NUMERO;NOMBRE CONTRATO;*TAREA;NOMBRE TAREA;*TIEMPO;OBSERVACIONES;CATEGORIA');
 
+      // Mismas filas, pero como matriz (para el .xlsx "de respaldo" — ver más
+      // abajo por qué existe).
+      var aoa = [
+        ['#','Tipo de registro:'],
+        ['#','  Comentarios (#)'],
+        ['#','  Titulo de columna (T)'],
+        ['#','  Fila de datos (D)'],
+        ['#','(*) Datos de la fila que deben ser completados con carácter obligatorio'],
+        ['#'],
+        ['#',"POR FAVOR, SI CARGA DATOS NUMÉRICOS, VERIFIQUE QUE LA COLUMNA TENGA FORMATO 'TEXTO/TEXT'"],
+        ['#'],
+        ['#','Alfanumérico','Alfanumérico','DD/MM/AAAA','Numérico','Alfanumérico','Indefinido','Alfanumérico','Alfanumérico','Alfanumérico','Numérico','Alfanumérico','Alfanumérico','Alfanumérico','HH/MM','Alfanumérico','Alfanumérico'],
+        ['T','NOMBRE_PERSONAL','*LEGAJO_PERSONAL','*FECHA','CLIENTE','NOMBRE CLIENTE','*CONTRATO-DIVISION','NOMBRE DIVISION','*CONTRATO-TIPO','NOMBRE TIPO','*CONTRATO-NUMERO','NOMBRE CONTRATO','*TAREA','NOMBRE TAREA','*TIEMPO','OBSERVACIONES','CATEGORIA']
+      ];
+
       // Filas para la vista previa en pantalla (no dependen de Excel para
       // mostrarse: la fecha "humana" se calcula con Date + Intl a partir del
       // YYYY-MM-DD original, así que sirve de control cruzado contra la
@@ -1281,6 +1297,7 @@ function exportPF(){
           ''
         ];
         lines.push(row.join(';'));
+        aoa.push(row);
         previewRows.push({
           nombre: (r.employeeName||'').trim(),
           legajo: legajo,
@@ -1298,9 +1315,36 @@ function exportPF(){
       var desde = document.getElementById('rpt-desde').value;
       var filename = 'PF_RegTiempos_'+(desde||'export')+'.csv';
 
-      mostrarPreviewPF(previewRows, Object.keys(sinLegajo), bytes, filename);
+      mostrarPreviewPF(previewRows, Object.keys(sinLegajo), bytes, filename, aoa);
     });
   });
+}
+
+// .xlsx "de respaldo": mismo contenido que el .csv, pero con TODAS las
+// celdas forzadas a tipo Texto (t='s', formato '@'). No es el archivo que
+// hay que subir a SAW (que sólo acepta .csv) — es para el caso de que el
+// cliente necesite abrir el archivo en Excel para revisar o corregir algo a
+// mano (ej. completar un legajo) y de ahí lo tenga que volver a guardar como
+// CSV: al estar ya marcado como Texto, esa columna no se reinterpreta como
+// fecha ni pierde ceros a la izquierda al pasar por ese camino. La propia
+// plantilla de SAW pide justamente esto ("VERIFIQUE QUE LA COLUMNA TENGA
+// FORMATO TEXTO/TEXT") para sus columnas numéricas.
+function generarExcelTextoPF(aoa){
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+  var range = XLSX.utils.decode_range(ws['!ref']);
+  for(var R=range.s.r; R<=range.e.r; R++){
+    for(var C=range.s.c; C<=range.e.c; C++){
+      var addr = XLSX.utils.encode_cell({r:R,c:C});
+      var cell = ws[addr];
+      if(!cell) continue;
+      cell.t = 's';
+      cell.z = '@';
+      if(cell.v!=null) cell.v = String(cell.v);
+    }
+  }
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PF_RegTiempos');
+  return wb;
 }
 
 // Vista previa en pantalla del .csv de nómina antes de descargarlo. Muestra
@@ -1308,10 +1352,11 @@ function exportPF(){
 // celda de tipo Texto) junto a una versión en palabras calculada aparte (día
 // de la semana + mes en letras, vía Date/Intl sobre el YYYY-MM-DD original)
 // para verificar a simple vista que el día y el mes son los correctos.
-var _pfPendingBytes = null, _pfPendingFilename = null;
-function mostrarPreviewPF(rows, faltantes, bytes, filename){
+var _pfPendingBytes = null, _pfPendingFilename = null, _pfPendingAoa = null;
+function mostrarPreviewPF(rows, faltantes, bytes, filename, aoa){
   _pfPendingBytes = bytes;
   _pfPendingFilename = filename;
+  _pfPendingAoa = aoa;
   var warn = faltantes.length
     ? '<div style="background:var(--e-bg);color:var(--err);border:1px solid var(--err);border-radius:var(--r);padding:10px 14px;font-size:12px;margin-bottom:12px">⚠ Sin legajo cargado (columna LEGAJO_PERSONAL vacía): '+faltantes.join(', ')+'. Cargalos en Proyectos → Legajos de nómina.</div>'
     : '';
@@ -1342,12 +1387,13 @@ function mostrarPreviewPF(rows, faltantes, bytes, filename){
       '</tr></thead><tbody>'+trs+'</tbody></table></div>'+
     '<p style="font-size:11px;color:var(--err);font-weight:600;margin-top:10px">⚠ Importante: subí este .csv TAL CUAL a SAW, sin abrirlo en Excel ni "guardarlo como CSV" desde ahí. Ese paso intermedio es el que reinterpreta la fecha según la configuración regional de la PC y la vuelve a romper — el archivo ya sale listo para subir directo.</p>'+
     '<p style="font-size:11px;color:var(--muted);margin-top:6px">La columna FECHA va como DD/MM/AAAA. La pantalla de carga de SAW puede mostrarla invertida (es un tema de visualización de SAW), pero al procesar el archivo la toma bien.</p>'+
-    '<p style="font-size:11px;color:var(--muted);margin-top:6px">Usá esta vista previa (columna FECHA vs. Control) para confirmar que el día y el mes son correctos antes de descargarlo.</p>';
+    '<p style="font-size:11px;color:var(--muted);margin-top:6px">Usá esta vista previa (columna FECHA vs. Control) para confirmar que el día y el mes son correctos antes de descargarlo.</p>'+
+    '<p style="font-size:11px;color:var(--muted);margin-top:6px">¿Necesitás revisar o corregir algo a mano antes de subirlo (ej. un legajo)? Bajá el "Excel de respaldo": tiene las mismas columnas ya marcadas como Texto, así que si después lo volvés a guardar como CSV desde ahí, no se rompen ni la fecha ni los números.</p>';
   document.getElementById('pf-preview-overlay').style.display = 'flex';
 }
 function cerrarPreviewPF(){
   document.getElementById('pf-preview-overlay').style.display = 'none';
-  _pfPendingBytes = null; _pfPendingFilename = null;
+  _pfPendingBytes = null; _pfPendingFilename = null; _pfPendingAoa = null;
 }
 function confirmarDescargaPF(){
   if(!_pfPendingBytes) return;
@@ -1361,6 +1407,12 @@ function confirmarDescargaPF(){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   cerrarPreviewPF();
+}
+function confirmarDescargaExcelPF(){
+  if(!_pfPendingAoa) return;
+  var wb = generarExcelTextoPF(_pfPendingAoa);
+  var nombreExcel = (_pfPendingFilename||'PF_RegTiempos.csv').replace(/\.csv$/i, '.xlsx');
+  XLSX.writeFile(wb, nombreExcel);
 }
 
 function exportExcel(){
