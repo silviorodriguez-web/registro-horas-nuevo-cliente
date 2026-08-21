@@ -360,7 +360,11 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
           </div>
           <div class="fg">
             <label>Tipo de contrato (export nómina)</label>
-            <input type="text" id="prj-f-contracttype" placeholder="Ej: Servicios" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+            <select id="prj-f-contracttype" style="padding:8px 10px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:inherit;width:100%">
+              <option value="">— Sin definir —</option>
+              <option value="CO">CO</option>
+              <option value="COU">COU</option>
+            </select>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:12px;align-items:end">
