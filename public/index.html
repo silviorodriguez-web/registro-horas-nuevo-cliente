@@ -918,6 +918,11 @@ function addEntry(){
   var desc = document.getElementById('c-desc').value;
   var bill = document.getElementById('c-bill').checked;
   if (!p) { alert('Escribí el nombre del proyecto o cliente'); return; }
+  var wrapAsig = document.getElementById('proyectos-asignados-wrap');
+  if (wrapAsig && wrapAsig.style.display === 'block' && !_currentProjectId) {
+    alert('Elegí un proyecto de "Mis proyectos asignados" antes de cargar la entrada.');
+    return;
+  }
   if (!d) { alert('Seleccioná un día'); return; }
   var pDesde = getPeriodoDesde(), pHasta = getPeriodoHasta();
   if (pDesde && d < pDesde) { alert('La fecha ' + d + ' es anterior al período seleccionado.\nEl período empieza el ' + pDesde + '.'); return; }
@@ -955,7 +960,9 @@ function addEntry(){
   document.getElementById('c-prj').value  = '';
   document.getElementById('c-desc').value = '';
   _currentProjectId = null;
-  setProyectoLocked(false);
+  // Si tiene proyectos asignados, vuelve a bloquear el campo tras agregar
+  // la entrada, para forzar a elegir de la lista en la próxima carga.
+  setProyectoLocked(wrapAsig && wrapAsig.style.display === 'block');
   renderColabList();
 }
 
@@ -1393,13 +1400,16 @@ function renderDropdownProyectosAsignados(){
   var sel  = document.getElementById('sel-proyecto-asignado');
   if(!wrap || !sel) return;
   var activos = _managedProjects.filter(function(p){ return p.status==='active'; });
-  if(!activos.length){ wrap.style.display='none'; return; }
+  if(!activos.length){ wrap.style.display='none'; setProyectoLocked(false); return; }
   sel.innerHTML = '<option value="">— Seleccioná un proyecto asignado —</option>' +
     activos.map(function(p){
       return '<option value="'+p.id+'" data-name="'+p.name.replace(/"/g,'&quot;')+'">'
         +'#'+p.id+' — '+p.name+(p.client?' ('+p.client+')':'')+(p.billable===false?' · No fact.':'')+'</option>';
     }).join('');
   wrap.style.display = 'block';
+  // Si tiene proyectos asignados, el campo "Proyecto / Cliente" arranca
+  // bloqueado: solo se destraba eligiendo uno de la lista de asignados.
+  setProyectoLocked(true);
 }
 
 function seleccionarProyectoAsignado(sel){
