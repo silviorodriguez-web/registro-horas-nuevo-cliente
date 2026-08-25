@@ -642,6 +642,7 @@ function seleccionarUsuario(){
   document.getElementById('av-name').textContent = nombre;
   document.getElementById('panel-carga').style.display = 'block';
   document.getElementById('panel-carga').scrollIntoView({behavior:'smooth', block:'start'});
+  cargarProyectosManaged();
   renderMisEnvios();
   // Obtener email del colaborador en background para usarlo en notificaciones
   apiCall('/users', { search: nombre, limit: 10 })
@@ -1386,13 +1387,23 @@ function submitDirect(){
 // ── PROYECTOS MANAGED (P3) ──
 function cargarProyectosManaged(){
   if(!currentUser) return;
+  // Reset inmediato al cambiar de usuario: limpia el proyecto elegido y
+  // bloquea el campo por defecto (queda así hasta confirmar, tras el
+  // fetch, si este usuario tiene o no proyectos asignados). Evita mostrar
+  // proyectos del usuario anterior y evita la ventana en la que el campo
+  // quedaría editable mientras se espera la respuesta del servidor.
+  _managedProjects = [];
+  document.getElementById('proyectos-asignados-wrap').style.display = 'none';
+  document.getElementById('c-prj').value = '';
+  _currentProjectId = null;
+  setProyectoLocked(true);
   fetch('/api/projects?employeeId='+currentUser.id)
     .then(function(r){ return r.json(); })
     .then(function(data){
       _managedProjects = Array.isArray(data)?data:[];
       renderDropdownProyectosAsignados();
     })
-    .catch(function(){ _managedProjects=[]; });
+    .catch(function(){ _managedProjects=[]; setProyectoLocked(false); });
 }
 
 function renderDropdownProyectosAsignados(){
