@@ -1587,8 +1587,13 @@ function seleccionarProyectoAsignado(sel){
   var proyecto = _managedProjects.find(function(p){ return p.id === id; });
   var billEl = document.getElementById('c-bill');
   if(billEl && proyecto){ billEl.checked = proyecto.billable !== false; updateBillLabel(); }
-  // reset el select para que quede como atajo, no como estado
-  setTimeout(function(){ sel.value=''; }, 50);
+  // A pedido del cliente (ago-2026): el desplegable "Mis proyectos
+  // asignados" YA NO se resetea solo — se queda mostrando el proyecto
+  // elegido, igual que el campo "Proyecto / Cliente" de abajo, para que
+  // se vea claramente en los dos lugares que la selección se conservó
+  // (antes, verlo vacío acá daba la sensación de que no se había guardado
+  // nada aunque el campo de abajo sí lo retuviera). Si el colaborador
+  // quiere cambiar de proyecto, elige otro de la lista normalmente.
 }
 
 // Bloquea el campo Proyecto/Cliente cuando se trajo el valor desde "Mis proyectos
