@@ -243,6 +243,15 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
         <span class="sub">Seleccioná para cargar horas rápidamente</span>
       </div>
       <div class="card-body" style="padding:14px 20px">
+        <!-- Filtro por cliente: solo se muestra si los proyectos asignados
+             pertenecen a más de un cliente, para achicar el desplegable de
+             abajo antes de elegir el proyecto puntual. -->
+        <div id="cliente-asignado-wrap" style="display:none;margin-bottom:10px">
+          <select id="sel-cliente-asignado" onchange="filtrarProyectosAsignadosPorCliente(this.value)"
+            style="padding:9px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;transition:border-color .15s;width:100%;max-width:320px">
+            <option value="">— Todos los clientes —</option>
+          </select>
+        </div>
         <select id="sel-proyecto-asignado" onchange="seleccionarProyectoAsignado(this)"
           style="padding:9px 12px;border:1px solid var(--border-med);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:#fff;outline:none;transition:border-color .15s;width:100%;max-width:600px">
           <option value="">— Seleccioná un proyecto asignado —</option>
@@ -939,9 +948,11 @@ function addEntry(){
     return;
   }
   if (!d) { alert('Seleccioná un día'); return; }
-  var pDesde = getPeriodoDesde(), pHasta = getPeriodoHasta();
-  if (pDesde && d < pDesde) { alert('La fecha ' + d + ' es anterior al período seleccionado.\nEl período empieza el ' + pDesde + '.'); return; }
-  if (pHasta && d > pHasta) { alert('La fecha ' + d + ' está fuera del período seleccionado.\nEl período finaliza el ' + pHasta + '.'); return; }
+  // Nota: el selector de semana/rango de arriba es solo una ayuda para
+  // prellenar el día por defecto — no bloquea imputar un día fuera de ese
+  // rango (a pedido del cliente, ago-2026). El período real de cada envío
+  // se calcula a partir de las fechas de las entradas cargadas, no del
+  // selector (ver getPeriodoLabelEfectivo/getPeriodoDesdeEfectivo/Hasta).
   if (isPeriodoCerrado(d)) {
     var liq = getLiquidacionPeriodo(d);
     showEntryError('⚠ El período de liquidación ' + liq.label + ' ya está cerrado. Consultá con tu supervisor.');
@@ -972,11 +983,15 @@ function addEntry(){
     saveProyecto(p);
     colabEntries.push({id:colabNextId++, project:p, projectId:null, day:d, hours:null, from:f, to:t, desc:desc, billable:bill});
   }
-  document.getElementById('c-prj').value  = '';
+  // A pedido del cliente (ago-2026): NO limpiar el proyecto/cliente tras
+  // agregar la entrada — se retiene para agilizar cargas consecutivas del
+  // mismo proyecto (ej. varios días seguidos). Solo se limpia la descripción,
+  // que suele ser propia de cada entrada.
   document.getElementById('c-desc').value = '';
-  _currentProjectId = null;
-  // Si tiene proyectos asignados, vuelve a bloquear el campo tras agregar
-  // la entrada, para forzar a elegir de la lista en la próxima carga.
+  // Si tiene proyectos asignados, el campo se mantiene bloqueado (ya lo
+  // estaba) mostrando el mismo proyecto recién usado, listo para la
+  // siguiente carga; si el colaborador quiere cambiar de proyecto, elige
+  // otro de "Mis proyectos asignados" y se actualiza igual que siempre.
   setProyectoLocked(wrapAsig && wrapAsig.style.display === 'block');
   renderColabList();
 }
@@ -1258,9 +1273,9 @@ function guardarBorrador(){
     employeeEmail:       currentUser.email||null,
     supervisorId:        null,
     supervisorName:      null,
-    periodo:             getPeriodoLabel(),
-    periodoDesde:        getPeriodoDesde(),
-    periodoHasta:        getPeriodoHasta(),
+    periodo:             getPeriodoLabelEfectivo(),
+    periodoDesde:        getPeriodoDesdeEfectivo(),
+    periodoHasta:        getPeriodoHastaEfectivo(),
     totalHoras:          totalH(colabEntries),
     submittedAt:         new Date().toISOString(),
     status:              'draft',
@@ -1350,7 +1365,7 @@ function submitDirect(){
   if (!confirm('Vas a enviar tus horas.\n⚡ No requiere aprobación del supervisor.\n\n¿Confirmar?')) return;
   var tot      = totalH(colabEntries);
   var nombre   = currentUser.firstName+' '+currentUser.lastName;
-  var periodo  = getPeriodoLabel();
+  var periodo  = getPeriodoLabelEfectivo();
   var submission = {
     employeeId:         currentUser.id,
     employeeInternalId: currentUser.employeeInternalId,
@@ -1358,8 +1373,8 @@ function submitDirect(){
     supervisorId:       null,
     supervisorName:     'Directo',
     periodo:            periodo,
-    periodoDesde:       getPeriodoDesde(),
-    periodoHasta:       getPeriodoHasta(),
+    periodoDesde:       getPeriodoDesdeEfectivo(),
+    periodoHasta:       getPeriodoHastaEfectivo(),
     totalHoras:         tot,
     submittedAt:        new Date().toISOString(),
     entries: colabEntries.map(function(e,i){ return Object.assign({},e,{id:i+1}); })
@@ -1430,6 +1445,8 @@ function cargarProyectosManaged(){
   // quedaría editable mientras se espera la respuesta del servidor.
   _managedProjects = [];
   document.getElementById('proyectos-asignados-wrap').style.display = 'none';
+  var clienteWrapReset = document.getElementById('cliente-asignado-wrap');
+  if(clienteWrapReset){ clienteWrapReset.style.display='none'; document.getElementById('sel-cliente-asignado').value=''; }
   document.getElementById('c-prj').value = '';
   _currentProjectId = null;
   setProyectoLocked(true);
@@ -1448,16 +1465,48 @@ function renderDropdownProyectosAsignados(){
   if(!wrap || !sel) return;
   var activos = _managedProjects.filter(function(p){ return p.status==='active'; });
   if(!activos.length){ wrap.style.display='none'; setProyectoLocked(false); checkCopiarSemanaVisible(); return; }
-  sel.innerHTML = '<option value="">— Seleccioná un proyecto asignado —</option>' +
-    activos.map(function(p){
-      return '<option value="'+p.id+'" data-name="'+p.name.replace(/"/g,'&quot;')+'">'
-        +'#'+p.id+' — '+p.name+(p.client?' ('+p.client+')':'')+(p.billable===false?' · No fact.':'')+'</option>';
-    }).join('');
+
+  // Filtro Cliente → Proyecto: solo se muestra el desplegable de cliente
+  // cuando los proyectos asignados pertenecen a más de un cliente distinto.
+  var clienteWrap = document.getElementById('cliente-asignado-wrap');
+  var clienteSel  = document.getElementById('sel-cliente-asignado');
+  var clientes = [];
+  activos.forEach(function(p){ if(p.client && clientes.indexOf(p.client)<0) clientes.push(p.client); });
+  if(clienteWrap && clienteSel){
+    if(clientes.length > 1){
+      var prevCliente = clienteSel.value;
+      clienteSel.innerHTML = '<option value="">— Todos los clientes —</option>' +
+        clientes.sort().map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>'; }).join('');
+      clienteSel.value = clientes.indexOf(prevCliente)>=0 ? prevCliente : '';
+      clienteWrap.style.display = 'block';
+    } else {
+      clienteWrap.style.display = 'none';
+      clienteSel.value = '';
+    }
+  }
+
+  renderOpcionesProyectoAsignado(activos, clienteSel ? clienteSel.value : '');
   wrap.style.display = 'block';
   // Si tiene proyectos asignados, el campo "Proyecto / Cliente" arranca
   // bloqueado: solo se destraba eligiendo uno de la lista de asignados.
   setProyectoLocked(true);
   checkCopiarSemanaVisible();
+}
+
+function renderOpcionesProyectoAsignado(activos, clienteFiltro){
+  var sel = document.getElementById('sel-proyecto-asignado');
+  if(!sel) return;
+  var filtrados = clienteFiltro ? activos.filter(function(p){ return p.client===clienteFiltro; }) : activos;
+  sel.innerHTML = '<option value="">— Seleccioná un proyecto asignado —</option>' +
+    filtrados.map(function(p){
+      return '<option value="'+p.id+'" data-name="'+p.name.replace(/"/g,'&quot;')+'">'
+        +'#'+p.id+' — '+p.name+(p.client?' ('+p.client+')':'')+(p.billable===false?' · No fact.':'')+'</option>';
+    }).join('');
+}
+
+function filtrarProyectosAsignadosPorCliente(cliente){
+  var activos = _managedProjects.filter(function(p){ return p.status==='active'; });
+  renderOpcionesProyectoAsignado(activos, cliente);
 }
 
 // ── COPIAR PROYECTOS DE LA SEMANA ANTERIOR ──
@@ -1571,12 +1620,16 @@ function getLunes(offset){
 function fmtDate(d){ return d.toISOString().split('T')[0]; }
 function fmtLabel(d){ return d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}); }
 
+// Nota (ago-2026): el selector semana/rango ya NO restringe qué día se puede
+// imputar (a pedido del cliente, bloqueaba cargar días fuera del rango
+// mostrado). Solo se usa para prellenar una fecha por defecto cómoda; el
+// colaborador puede cambiar el campo "Día" a cualquier fecha libremente.
 function updateSemanaLabel(){
   var lunes   = getLunes(semanaOffset);
   var viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
   document.getElementById('semana-label').textContent = fmtLabel(lunes) + ' – ' + fmtLabel(viernes) + ' ' + lunes.getFullYear();
   var cday = document.getElementById('c-day');
-  if (cday) { cday.min=fmtDate(lunes); cday.max=fmtDate(viernes); if(!cday.value) cday.value=fmtDate(lunes); }
+  if (cday && !cday.value) cday.value = fmtDate(lunes);
 }
 
 function navSemana(dir){ semanaOffset += dir; updateSemanaLabel(); checkCopiarSemanaVisible(); }
@@ -1591,11 +1644,9 @@ function setPeriodoMode(mode){
   document.getElementById('tab-rango').style.color  = mode==='rango'  ? '#fff' : 'var(--brand)';
   var cday = document.getElementById('c-day');
   if (mode === 'semana') {
-    var lunes   = getLunes(semanaOffset);
-    var viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
-    if (cday) { cday.min=fmtDate(lunes); cday.max=fmtDate(viernes); cday.value=fmtDate(lunes); }
+    var lunes = getLunes(semanaOffset);
+    if (cday) cday.value = fmtDate(lunes);
   } else {
-    if (cday) { cday.min=''; cday.max=''; }
     onRangoChange();
   }
   checkCopiarSemanaVisible();
@@ -1607,7 +1658,7 @@ function onRangoChange(){
   var cday  = document.getElementById('c-day');
   var label = document.getElementById('rango-label');
   if (desde && hasta) {
-    if (cday) { cday.min=desde; cday.max=hasta; cday.value=desde; }
+    if (cday && !cday.value) cday.value = desde;
     var days = Math.round((new Date(hasta)-new Date(desde))/(1000*60*60*24))+1;
     if (label) label.textContent = days + ' día' + (days===1?'':'s');
   } else {
@@ -1615,6 +1666,13 @@ function onRangoChange(){
   }
 }
 
+// getPeriodoLabel/Desde/Hasta: reflejan el selector de arriba (semana o
+// rango) — se siguen usando solo como valor por defecto para prellenar el
+// campo "Día". Para lo que efectivamente se guarda/envía en cada
+// submission, usar las variantes "Efectivo", que se calculan a partir de
+// las fechas reales de las entradas cargadas (ver más abajo), para que el
+// período mostrado en "Mis envíos anteriores" sea siempre coherente aunque
+// el colaborador haya cargado días fuera de la semana/rango seleccionado.
 function getPeriodoLabel(){
   if (periodoMode==='semana') return document.getElementById('semana-label').textContent;
   var desde=document.getElementById('rango-desde').value, hasta=document.getElementById('rango-hasta').value;
@@ -1628,6 +1686,22 @@ function getPeriodoDesde(){
 function getPeriodoHasta(){
   if (periodoMode==='semana') { var v=new Date(getLunes(semanaOffset)); v.setDate(v.getDate()+4); return fmtDate(v); }
   return document.getElementById('rango-hasta').value || fmtDate(new Date());
+}
+
+// ── PERÍODO EFECTIVO (calculado desde las entradas reales, no del selector) ──
+function getPeriodoDesdeEfectivo(){
+  if (!colabEntries.length) return getPeriodoDesde();
+  return colabEntries.reduce(function(min,e){ return (!min || e.day<min) ? e.day : min; }, null);
+}
+function getPeriodoHastaEfectivo(){
+  if (!colabEntries.length) return getPeriodoHasta();
+  return colabEntries.reduce(function(max,e){ return (!max || e.day>max) ? e.day : max; }, null);
+}
+function getPeriodoLabelEfectivo(){
+  if (!colabEntries.length) return getPeriodoLabel();
+  var desde = getPeriodoDesdeEfectivo(), hasta = getPeriodoHastaEfectivo();
+  if (desde === hasta) return fmtLabel(new Date(desde+'T12:00:00'));
+  return fmtLabel(new Date(desde+'T12:00:00')) + ' – ' + fmtLabel(new Date(hasta+'T12:00:00')) + ' ' + new Date(hasta+'T12:00:00').getFullYear();
 }
 
 

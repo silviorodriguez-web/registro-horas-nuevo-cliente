@@ -294,10 +294,10 @@ code { font-family:'DM Mono',monospace; font-size:11px; background:rgba(59,95,19
       <input type="date" class="filter-inp" id="rpt-desde" onchange="renderReportes()">
       <label>hasta</label>
       <input type="date" class="filter-inp" id="rpt-hasta" onchange="renderReportes()">
+      <label>Cliente</label>
+      <select class="filter-inp" id="rpt-cliente" onchange="onRptClienteChange()"><option value="">Todos</option></select>
       <label>Proyecto</label>
       <select class="filter-inp" id="rpt-proyecto" onchange="renderReportes()"><option value="">Todos</option></select>
-      <label>Cliente</label>
-      <select class="filter-inp" id="rpt-cliente" onchange="renderReportes()"><option value="">Todos</option></select>
       <label>Usuario</label>
       <input type="text" class="filter-inp" id="rpt-usuario" placeholder="Nombre o email..." oninput="renderReportes()" style="min-width:170px">
       <button class="btn btn-sm" onclick="clearRptFilter()" style="font-size:11px;padding:4px 10px">✕ Limpiar filtros</button>
@@ -1269,7 +1269,10 @@ function exportPF(){
 
       pairs.forEach(function(pair){
         var r = pair.r, e = pair.e;
-        var proj = _allProjects.find(function(p){ return p.name && p.name.trim()===String(e.project||'').trim(); });
+        // Resuelve por projectId primero (sobrevive a un rename del
+        // proyecto); solo cae a buscar por nombre para entradas viejas sin
+        // projectId guardado.
+        var proj = resolveProject(e);
         var email = (r.employeeEmail||'').toLowerCase();
         var legajo = legajos[email] || '';
         if(!legajo) sinLegajo[r.employeeName] = true;
@@ -1289,7 +1292,7 @@ function exportPF(){
           csvSafe(tipoContrato),
           csvSafe(tipoContrato), // NOMBRE TIPO (Tipo de contrato) — antes quedaba vacía, el cliente la necesita
           csvSafe(proj ? proj.id : (e.projectId||'')),
-          csvSafe(e.project||''),
+          csvSafe(proj ? proj.name : (e.project||'')),
           'HP',
           '',
           csvSafe(decToHM(decHours)),
@@ -1305,7 +1308,7 @@ function exportPF(){
           fechaHumana: fmtDay(e.day),
           cliente: proj ? (proj.client||'') : '',
           tipoContrato: tipoContrato,
-          proyecto: e.project||'',
+          proyecto: proj ? proj.name : (e.project||''),
           tiempo: decToHM(decHours)
         });
       });
@@ -1426,8 +1429,8 @@ function exportExcel(){
       var r = pair.r, e = pair.e;
       var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
       detalleRows.push([
-        clienteDeProyecto(e.project),
-        e.project,
+        entryClient(e),
+        entryProjectLabel(e),
         e.desc||'',
         r.employeeName,
         r.employeeEmail||'',
@@ -1441,21 +1444,23 @@ function exportExcel(){
       ]);
     });
 
-    // Hoja 2: Resumen por proyecto
+    // Hoja 2: Resumen por proyecto — agrupado por clave estable (ID cuando
+    // se puede resolver) para que un proyecto renombrado no se parta en dos
+    // filas.
     var byPrj = {};
     pairs.forEach(function(pair){
-      var e = pair.e, key = e.project;
-      if(!byPrj[key]) byPrj[key]={client:clienteDeProyecto(key),total:0,fact:0,noFact:0};
+      var e = pair.e, key = entryProjectKey(e);
+      if(!byPrj[key]) byPrj[key]={label:entryProjectLabel(e),client:entryClient(e),total:0,fact:0,noFact:0};
       var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
       byPrj[key].total += h;
       if(e.billable!==false) byPrj[key].fact += h;
       else byPrj[key].noFact += h;
     });
     var prjRows = [['Client','Project','Total Horas','Facturable','No Facturable','% Facturable']];
-    Object.keys(byPrj).sort().forEach(function(p){
+    Object.keys(byPrj).sort(function(a,b){ return byPrj[a].label.localeCompare(byPrj[b].label); }).forEach(function(p){
       var d = byPrj[p];
       var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
-      prjRows.push([d.client, p, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+      prjRows.push([d.client, d.label, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
     });
 
     // Hoja 3: Resumen por colaborador
@@ -1498,6 +1503,43 @@ function ensureProjectsLoaded(cb){
 
 function clienteDeProyecto(name){
   var p = _allProjects.find(function(x){ return x.name && x.name.trim()===String(name||'').trim(); });
+  return p ? (p.client||'') : '';
+}
+
+// ── TRAZABILIDAD POR ID DE PROYECTO (ago-2026) ──
+// Antes, Reportería agrupaba/filtraba/exportaba comparando por el NOMBRE
+// del proyecto (e.project). Si un proyecto se renombra en el panel (ej.
+// "Soporte Iris" → "552 Soporte Iris"), las horas cargadas ANTES del cambio
+// quedan guardadas con el nombre viejo y dejan de matchear contra la lista
+// actual de proyectos: el reporte las separa en una línea aparte y pierde
+// el cliente asociado.
+//
+// Las entradas cargadas desde "Mis proyectos asignados" ya guardan
+// projectId (id estable, no cambia con el rename). Estas funciones lo usan
+// como clave principal para resolver proyecto/cliente/nombre a mostrar, y
+// solo caen al matching por nombre como respaldo para entradas viejas o
+// cargadas a mano sin projectId (que nunca tuvieron esa trazabilidad).
+function projectById(id){
+  if(id==null) return null;
+  return _allProjects.find(function(p){ return p.id === Number(id); }) || null;
+}
+function resolveProject(e){
+  if(e.projectId){ var p = projectById(e.projectId); if(p) return p; }
+  return _allProjects.find(function(x){ return x.name && x.name.trim()===String(e.project||'').trim(); }) || null;
+}
+// Clave estable de agrupación/filtro: por ID cuando está disponible (sobrevive
+// a un rename), por nombre para entradas legacy/manuales sin projectId.
+function entryProjectKey(e){
+  return e.projectId ? ('id:'+e.projectId) : ('name:'+String(e.project||'').trim());
+}
+// Nombre a MOSTRAR: siempre el nombre ACTUAL del proyecto si se pudo
+// resolver por ID (aunque la entrada tenga guardado el nombre viejo).
+function entryProjectLabel(e){
+  var p = resolveProject(e);
+  return p ? p.name : (e.project||'');
+}
+function entryClient(e){
+  var p = resolveProject(e);
   return p ? (p.client||'') : '';
 }
 
@@ -1826,9 +1868,10 @@ function importarLegajosPlanilla(input){
 function clearRptFilter(){
   document.getElementById('rpt-desde').value='';
   document.getElementById('rpt-hasta').value='';
-  document.getElementById('rpt-proyecto').value='';
   document.getElementById('rpt-cliente').value='';
+  document.getElementById('rpt-proyecto').value='';
   document.getElementById('rpt-usuario').value='';
+  renderReportesProyectoOptions(''); // vuelve a mostrar todos los proyectos, sin filtro de cliente
   renderReportes();
 }
 
@@ -1837,25 +1880,71 @@ function reportesRequests(){
   return requests.filter(function(r){ return r.status !== 'draft'; });
 }
 
+// Catálogo de proyectos vistos en los reportes, clave estable por ID
+// (entryProjectKey) para que un rename no rompa el filtro ni el
+// agrupamiento. Se guarda en una variable de módulo para que el cascade
+// Cliente→Proyecto pueda re-renderizar el desplegable de proyecto sin
+// tener que recalcularlo.
+var _rptCatalogo = {};
+
+function buildRptCatalogo(){
+  var catalogo = {};
+  _allProjects.forEach(function(p){
+    catalogo['id:'+p.id] = { key:'id:'+p.id, label:p.name, client:p.client||'' };
+  });
+  requests.forEach(function(r){
+    (r.entries||[]).forEach(function(e){
+      if(!e.project) return;
+      var key = entryProjectKey(e);
+      if(!catalogo[key]) catalogo[key] = { key:key, label: entryProjectLabel(e), client: entryClient(e) };
+    });
+  });
+  return catalogo;
+}
+
 function renderReportesFiltersOptions(){
   var prjSel = document.getElementById('rpt-proyecto');
   var cliSel = document.getElementById('rpt-cliente');
   if(!prjSel || !cliSel) return;
-  var prjNames = {}, clientes = {};
-  _allProjects.forEach(function(p){ prjNames[p.name]=true; if(p.client) clientes[p.client]=true; });
-  requests.forEach(function(r){ (r.entries||[]).forEach(function(e){ if(e.project) prjNames[e.project]=true; }); });
-  var curPrj = prjSel.value, curCli = cliSel.value;
-  prjSel.innerHTML = '<option value="">Todos</option>' + Object.keys(prjNames).sort().map(function(n){
-    return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';
-  }).join('');
+  _rptCatalogo = buildRptCatalogo();
+
+  var curCli = cliSel.value;
+  var clientes = {};
+  Object.keys(_rptCatalogo).forEach(function(k){ if(_rptCatalogo[k].client) clientes[_rptCatalogo[k].client]=true; });
   cliSel.innerHTML = '<option value="">Todos</option>' + Object.keys(clientes).sort().map(function(c){
     return '<option value="'+c.replace(/"/g,'&quot;')+'">'+c+'</option>';
   }).join('');
-  if(Object.prototype.hasOwnProperty.call(prjNames, curPrj)) prjSel.value = curPrj;
   if(Object.prototype.hasOwnProperty.call(clientes, curCli)) cliSel.value = curCli;
+
+  // Filtro en cascada: el desplegable de Proyecto solo muestra los
+  // proyectos del cliente elegido (si hay uno elegido).
+  renderReportesProyectoOptions(cliSel.value);
 }
 
-// Devuelve [{r:solicitud, e:entrada}] aplicando fecha + proyecto + cliente + usuario combinados
+function renderReportesProyectoOptions(clienteFiltro){
+  var prjSel = document.getElementById('rpt-proyecto');
+  if(!prjSel) return;
+  var curPrj = prjSel.value;
+  var items = Object.keys(_rptCatalogo).map(function(k){ return _rptCatalogo[k]; })
+    .filter(function(it){ return !clienteFiltro || it.client===clienteFiltro; })
+    .sort(function(a,b){ return a.label.localeCompare(b.label); });
+  prjSel.innerHTML = '<option value="">Todos</option>' + items.map(function(it){
+    return '<option value="'+it.key.replace(/"/g,'&quot;')+'">'+it.label+'</option>';
+  }).join('');
+  if(items.some(function(it){ return it.key===curPrj; })) prjSel.value = curPrj;
+}
+
+// Se dispara al cambiar el filtro Cliente: recorta las opciones de
+// Proyecto a las de ese cliente y vuelve a renderizar el reporte.
+function onRptClienteChange(){
+  renderReportesProyectoOptions(document.getElementById('rpt-cliente').value);
+  renderReportes();
+}
+
+// Devuelve [{r:solicitud, e:entrada}] aplicando fecha + proyecto + cliente + usuario combinados.
+// El filtro de proyecto compara por clave estable (entryProjectKey: por ID
+// cuando se puede resolver), no por el texto del nombre — así selecciona
+// todas las horas de ese proyecto aunque se haya renombrado en el medio.
 function getFilteredEntryPairs(){
   var desde = document.getElementById('rpt-desde') ? document.getElementById('rpt-desde').value : '';
   var hasta = document.getElementById('rpt-hasta') ? document.getElementById('rpt-hasta').value : '';
@@ -1873,8 +1962,8 @@ function getFilteredEntryPairs(){
       var day = e.day || (r.submittedAt ? r.submittedAt.slice(0,10) : '');
       if(desde && day && day < desde) return;
       if(hasta && day && day > hasta) return;
-      if(prj && e.project !== prj) return;
-      if(cli && clienteDeProyecto(e.project) !== cli) return;
+      if(prj && entryProjectKey(e) !== prj) return;
+      if(cli && entryClient(e) !== cli) return;
       pairs.push({ r: r, e: e });
     });
   });
@@ -1904,8 +1993,11 @@ function renderReportes(){
     totMin += m; if(bill) totBillMin += m;
     if(!byEmp[r.employeeName]) byEmp[r.employeeName]={min:0,billMin:0};
     byEmp[r.employeeName].min += m; if(bill) byEmp[r.employeeName].billMin += m;
-    if(!byPrj[e.project]) byPrj[e.project]={min:0,billMin:0,billable:bill};
-    byPrj[e.project].min += m; if(bill) byPrj[e.project].billMin += m;
+    // Agrupar por clave estable (ID cuando se puede resolver) para que un
+    // proyecto renombrado no se parta en dos líneas — ver entryProjectKey.
+    var prjKey = entryProjectKey(e);
+    if(!byPrj[prjKey]) byPrj[prjKey]={label:entryProjectLabel(e),min:0,billMin:0,billable:bill};
+    byPrj[prjKey].min += m; if(bill) byPrj[prjKey].billMin += m;
   });
   var nSolic = Object.keys(reqIds).length;
   var totNoBillMin = totMin - totBillMin;
@@ -1913,7 +2005,7 @@ function renderReportes(){
   var nEmp = Object.keys(byEmp).length;
 
   var empArr = Object.keys(byEmp).map(function(n){ return {name:n,min:byEmp[n].min,billMin:byEmp[n].billMin}; }).sort(function(a,b){ return b.min-a.min; });
-  var prjArr = Object.keys(byPrj).map(function(p){ return {name:p,min:byPrj[p].min,billMin:byPrj[p].billMin}; }).sort(function(a,b){ return b.min-a.min; });
+  var prjArr = Object.keys(byPrj).map(function(k){ return {name:byPrj[k].label,min:byPrj[k].min,billMin:byPrj[k].billMin}; }).sort(function(a,b){ return b.min-a.min; });
   var maxEmpMin = empArr.length ? empArr[0].min : 1;
   var maxPrjMin = prjArr.length ? prjArr[0].min : 1;
 
