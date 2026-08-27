@@ -263,28 +263,6 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
     <div class="card">
       <div class="card-hd">
         Nueva entrada
-        <div style="display:flex;align-items:center;gap:8px">
-          <div id="periodo-tabs" style="display:flex;background:rgba(59,95,191,.08);border-radius:8px;padding:3px;gap:2px">
-            <button onclick="setPeriodoMode('semana')" id="tab-semana" style="padding:4px 12px;border-radius:6px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;background:var(--brand);color:#fff;transition:.15s">Semana</button>
-            <button onclick="setPeriodoMode('rango')"  id="tab-rango"  style="padding:4px 12px;border-radius:6px;border:none;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--brand);transition:.15s">Rango libre</button>
-          </div>
-        </div>
-      </div>
-      <!-- Selector semana -->
-      <div id="modo-semana" style="padding:10px 20px 0;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
-        <button onclick="navSemana(-1)" style="background:none;border:1px solid var(--border-med);border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--muted);font-size:12px;font-family:inherit">&#8592;</button>
-        <span id="semana-label" style="font-size:13px;font-weight:600;min-width:160px;text-align:center"></span>
-        <button onclick="navSemana(1)"  style="background:none;border:1px solid var(--border-med);border-radius:7px;padding:4px 10px;cursor:pointer;color:var(--muted);font-size:12px;font-family:inherit">&#8594;</button>
-      </div>
-      <!-- Selector rango libre -->
-      <div id="modo-rango" style="padding:10px 20px 0;display:none;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Desde</label>
-          <input type="date" id="rango-desde" style="padding:6px 10px;border:1px solid var(--border-med);border-radius:8px;font-size:13px;font-family:inherit;outline:none" onchange="onRangoChange()">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Hasta</label>
-          <input type="date" id="rango-hasta" style="padding:6px 10px;border:1px solid var(--border-med);border-radius:8px;font-size:13px;font-family:inherit;outline:none" onchange="onRangoChange()">
-          <span id="rango-label" style="font-size:12px;color:var(--muted)"></span>
-        </div>
       </div>
       <div class="card-body">
         <!-- Copiar proyectos de la semana anterior: solo se ofrece cuando el
@@ -1519,7 +1497,7 @@ function checkCopiarSemanaVisible(){
   if (!box) return;
   var asigWrap = document.getElementById('proyectos-asignados-wrap');
   var asignadosActivo = !!(asigWrap && asigWrap.style.display === 'block');
-  var show = !!currentUser && periodoMode === 'semana' && !asignadosActivo;
+  var show = !!currentUser && !asignadosActivo;
   box.style.display = show ? 'block' : 'none';
   if (!show) {
     var panel = document.getElementById('copiar-semana-chips');
@@ -1611,7 +1589,10 @@ function setProyectoLocked(locked){
 }
 
 // ── PERÍODO ──
-var periodoMode  = 'semana';
+// semanaOffset queda fijo en 0 ("semana calendario actual"): ya no hay
+// navegación de semana en la interfaz, pero se sigue usando como noción
+// interna de "semana anterior" para el atajo de copiar proyectos (ver
+// renderCopiarSemanaChips) y como fallback de getPeriodoDesde/Hasta/Label.
 var semanaOffset = 0;
 
 function getLunes(offset){
@@ -1625,73 +1606,26 @@ function getLunes(offset){
 function fmtDate(d){ return d.toISOString().split('T')[0]; }
 function fmtLabel(d){ return d.toLocaleDateString('es-AR',{day:'numeric',month:'short'}); }
 
-// Nota (ago-2026): el selector semana/rango ya NO restringe qué día se puede
-// imputar (a pedido del cliente, bloqueaba cargar días fuera del rango
-// mostrado). Solo se usa para prellenar una fecha por defecto cómoda; el
-// colaborador puede cambiar el campo "Día" a cualquier fecha libremente.
-function updateSemanaLabel(){
-  var lunes   = getLunes(semanaOffset);
-  var viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
-  document.getElementById('semana-label').textContent = fmtLabel(lunes) + ' – ' + fmtLabel(viernes) + ' ' + lunes.getFullYear();
-  var cday = document.getElementById('c-day');
-  if (cday && !cday.value) cday.value = fmtDate(lunes);
-}
-
-function navSemana(dir){ semanaOffset += dir; updateSemanaLabel(); checkCopiarSemanaVisible(); }
-
-function setPeriodoMode(mode){
-  periodoMode = mode;
-  document.getElementById('modo-semana').style.display = mode==='semana' ? 'flex' : 'none';
-  document.getElementById('modo-rango').style.display  = mode==='rango'  ? 'flex' : 'none';
-  document.getElementById('tab-semana').style.background = mode==='semana' ? 'var(--brand)' : 'transparent';
-  document.getElementById('tab-semana').style.color = mode==='semana' ? '#fff' : 'var(--brand)';
-  document.getElementById('tab-rango').style.background  = mode==='rango'  ? 'var(--brand)' : 'transparent';
-  document.getElementById('tab-rango').style.color  = mode==='rango'  ? '#fff' : 'var(--brand)';
-  var cday = document.getElementById('c-day');
-  if (mode === 'semana') {
-    var lunes = getLunes(semanaOffset);
-    if (cday) cday.value = fmtDate(lunes);
-  } else {
-    onRangoChange();
-  }
-  checkCopiarSemanaVisible();
-}
-
-function onRangoChange(){
-  var desde = document.getElementById('rango-desde').value;
-  var hasta = document.getElementById('rango-hasta').value;
-  var cday  = document.getElementById('c-day');
-  var label = document.getElementById('rango-label');
-  if (desde && hasta) {
-    if (cday && !cday.value) cday.value = desde;
-    var days = Math.round((new Date(hasta)-new Date(desde))/(1000*60*60*24))+1;
-    if (label) label.textContent = days + ' día' + (days===1?'':'s');
-  } else {
-    if (label) label.textContent = '';
-  }
-}
-
-// getPeriodoLabel/Desde/Hasta: reflejan el selector de arriba (semana o
-// rango) — se siguen usando solo como valor por defecto para prellenar el
-// campo "Día". Para lo que efectivamente se guarda/envía en cada
-// submission, usar las variantes "Efectivo", que se calculan a partir de
-// las fechas reales de las entradas cargadas (ver más abajo), para que el
-// período mostrado en "Mis envíos anteriores" sea siempre coherente aunque
-// el colaborador haya cargado días fuera de la semana/rango seleccionado.
+// Nota (ago-2026): se sacó por completo el selector "Semana / Rango libre"
+// de la interfaz — el cliente no lo necesita, solo que cada colaborador
+// pueda elegir libremente la fecha de cada entrada en el campo "Día"
+// (input de fecha nativo, sin mínimo ni máximo). No queda ninguna regla de
+// negocio atada a este selector: la única validación real de fechas es el
+// cierre de período de liquidación (ver isPeriodoCerrado), que es
+// independiente y sigue funcionando igual.
+//
+// getPeriodoLabel/Desde/Hasta quedan como fallback interno (usan "la
+// semana actual" como noción de período por defecto) para el caso límite
+// de que se llamen sin entradas cargadas — en la práctica no se usan,
+// porque tanto guardarBorrador() como submitDirect() ya exigen al menos
+// una entrada y usan las variantes "Efectivo" (ver más abajo), calculadas
+// a partir de las fechas reales cargadas.
 function getPeriodoLabel(){
-  if (periodoMode==='semana') return document.getElementById('semana-label').textContent;
-  var desde=document.getElementById('rango-desde').value, hasta=document.getElementById('rango-hasta').value;
-  if (desde&&hasta) return fmtLabel(new Date(desde))+' – '+fmtLabel(new Date(hasta));
-  return 'Período personalizado';
+  var lunes = getLunes(semanaOffset), viernes = new Date(lunes); viernes.setDate(lunes.getDate()+4);
+  return fmtLabel(lunes) + ' – ' + fmtLabel(viernes) + ' ' + lunes.getFullYear();
 }
-function getPeriodoDesde(){
-  if (periodoMode==='semana') return fmtDate(getLunes(semanaOffset));
-  return document.getElementById('rango-desde').value || fmtDate(new Date());
-}
-function getPeriodoHasta(){
-  if (periodoMode==='semana') { var v=new Date(getLunes(semanaOffset)); v.setDate(v.getDate()+4); return fmtDate(v); }
-  return document.getElementById('rango-hasta').value || fmtDate(new Date());
-}
+function getPeriodoDesde(){ return fmtDate(getLunes(semanaOffset)); }
+function getPeriodoHasta(){ var v=new Date(getLunes(semanaOffset)); v.setDate(v.getDate()+4); return fmtDate(v); }
 
 // ── PERÍODO EFECTIVO (calculado desde las entradas reales, no del selector) ──
 function getPeriodoDesdeEfectivo(){
@@ -1819,10 +1753,9 @@ if(_initSession){
 }
 cargarSegmentos();
 cargarSupervisoresColab();
-updateSemanaLabel();
-var _hoy = new Date();
-document.getElementById('rango-desde').value = fmtDate(_hoy);
-document.getElementById('rango-hasta').value = fmtDate(_hoy);
+// Fecha por defecto del campo "Día": hoy. El colaborador puede cambiarla
+// libremente a cualquier fecha (sin mínimo ni máximo).
+document.getElementById('c-day').value = todayStr();
 </script>
 </body>
 </html>
