@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -419,6 +420,7 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
     <label>Hasta</label>
     <input type="date" id="mr-hasta" onchange="renderMiReporte()">
     <button class="btn btn-sm" type="button" onclick="limpiarFiltrosMiReporte()" style="margin-left:auto">Limpiar filtros</button>
+    <button class="btn btn-sm" type="button" onclick="exportMiReporteExcel()" style="font-size:11px;padding:4px 12px;background:#059669;color:#fff;border-color:#059669">⬇ Exportar Excel</button>
   </div>
   <div id="mr-content"><div class="mr-empty">Cargando tu reporte...</div></div>
 </div>
@@ -772,6 +774,8 @@ function showColabTab(tab){
   if(!isCarga) renderMiReporte();
 }
 
+var _miReportePairsCache = [];
+
 function renderMiReporte(){
   if(!currentUser) return;
   var content = document.getElementById('mr-content');
@@ -797,6 +801,8 @@ function pintarMiReporte(all){
       pairs.push(e);
     });
   });
+
+  _miReportePairsCache = pairs;
 
   if(!pairs.length){
     content.innerHTML = '<div class="mr-empty">Sin datos para los filtros seleccionados.</div>';
@@ -849,6 +855,49 @@ function limpiarFiltrosMiReporte(){
   document.getElementById('mr-desde').value = '';
   document.getElementById('mr-hasta').value = '';
   renderMiReporte();
+}
+
+// Exporta a Excel las mismas horas que se ven en "Mi reporte" (respetando el
+// filtro de fechas aplicado): una hoja de detalle día a día y otra con el
+// resumen por proyecto, igual criterio que el reporte del admin.
+function exportMiReporteExcel(){
+  var pairs = _miReportePairsCache;
+  if(!pairs.length){ alert('No hay datos para exportar con los filtros actuales.'); return; }
+
+  var detalleRows = [['Fecha','Proyecto','Descripción','Facturable','Horas']];
+  pairs.forEach(function(e){
+    var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+    detalleRows.push([
+      e.day || '',
+      e.project || '(sin proyecto)',
+      e.desc || '',
+      e.billable !== false ? 'Sí' : 'No',
+      decHours
+    ]);
+  });
+
+  var byPrj = {};
+  pairs.forEach(function(e){
+    var key = e.projectId != null ? ('id:' + e.projectId) : ('nm:' + (e.project || ''));
+    if(!byPrj[key]) byPrj[key] = { label: e.project || '(sin proyecto)', total: 0, fact: 0, noFact: 0 };
+    var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
+    byPrj[key].total += h;
+    if(e.billable !== false) byPrj[key].fact += h;
+    else byPrj[key].noFact += h;
+  });
+  var prjRows = [['Proyecto','Total Horas','Facturable','No Facturable','% Facturable']];
+  Object.keys(byPrj).sort(function(a,b){ return byPrj[a].label.localeCompare(byPrj[b].label); }).forEach(function(k){
+    var d = byPrj[k];
+    var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
+    prjRows.push([d.label, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+  });
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalleRows), 'Detalle');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prjRows),     'Por Proyecto');
+  var desde = document.getElementById('mr-desde').value;
+  var fileName = 'mi-reporte-' + (desde || 'todo') + '.xlsx';
+  XLSX.writeFile(wb, fileName);
 }
 
 // ── COLABORADOR — ENTRADAS ──
