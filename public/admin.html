@@ -1275,7 +1275,9 @@ function exportPF(){
         var proj = resolveProject(e);
         var email = (r.employeeEmail||'').toLowerCase();
         var legajo = legajos[email] || '';
-        if(!legajo) sinLegajo[r.employeeName] = true;
+        // Se deduplica por email (estable), no por nombre, para que un
+        // colaborador renombrado no aparezca dos veces en el aviso.
+        if(!legajo) sinLegajo[email || ('name:'+r.employeeName)] = r.employeeName||email;
         var decHours = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
         var fecha = fechaDDMMAAAA(e.day);
         var division = proj ? (proj.division||'') : '';
@@ -1318,7 +1320,7 @@ function exportPF(){
       var desde = document.getElementById('rpt-desde').value;
       var filename = 'PF_RegTiempos_'+(desde||'export')+'.csv';
 
-      mostrarPreviewPF(previewRows, Object.keys(sinLegajo), bytes, filename, aoa);
+      mostrarPreviewPF(previewRows, Object.keys(sinLegajo).map(function(k){ return sinLegajo[k]; }), bytes, filename, aoa);
     });
   });
 }
@@ -1463,21 +1465,23 @@ function exportExcel(){
       prjRows.push([d.client, d.label, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
     });
 
-    // Hoja 3: Resumen por colaborador
+    // Hoja 3: Resumen por colaborador (agrupado por employeeId estable, no
+    // por nombre, para que un cambio de nombre/apellido no lo parta en dos)
     var byEmp = {};
     pairs.forEach(function(pair){
       var r = pair.r, e = pair.e;
-      if(!byEmp[r.employeeName]) byEmp[r.employeeName]={email:r.employeeEmail||'',total:0,fact:0,noFact:0};
+      var key = entryEmployeeKey(r);
+      if(!byEmp[key]) byEmp[key]={name:r.employeeName||'',email:r.employeeEmail||'',total:0,fact:0,noFact:0};
       var h = e.hours!=null ? e.hours : Math.round(entryMin(e)/60*100)/100;
-      byEmp[r.employeeName].total += h;
-      if(e.billable!==false) byEmp[r.employeeName].fact += h;
-      else byEmp[r.employeeName].noFact += h;
+      byEmp[key].total += h;
+      if(e.billable!==false) byEmp[key].fact += h;
+      else byEmp[key].noFact += h;
     });
     var empRows = [['User','Email','Total Horas','Facturable','No Facturable','% Facturable']];
-    Object.keys(byEmp).sort().forEach(function(n){
-      var d = byEmp[n];
+    Object.keys(byEmp).sort(function(a,b){ return byEmp[a].name.localeCompare(byEmp[b].name); }).forEach(function(k){
+      var d = byEmp[k];
       var pct = d.total>0 ? Math.round(d.fact/d.total*100) : 0;
-      empRows.push([n, d.email, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
+      empRows.push([d.name, d.email, Math.round(d.total*100)/100, Math.round(d.fact*100)/100, Math.round(d.noFact*100)/100, pct+'%']);
     });
 
     var wb = XLSX.utils.book_new();
@@ -1541,6 +1545,16 @@ function entryProjectLabel(e){
 function entryClient(e){
   var p = resolveProject(e);
   return p ? (p.client||'') : '';
+}
+
+// ── TRAZABILIDAD POR ID DE COLABORADOR (sep-2026) ──
+// Mismo problema que con proyectos: si a un colaborador se le corrige el
+// nombre/apellido (ej. sacarle un acento), Reportería lo separaba en dos
+// líneas porque agrupaba por employeeName (string). Cada envío ya guarda
+// employeeId (id estable de Humand, no cambia con el rename), así que se
+// usa como clave principal y el nombre solo se usa para mostrar.
+function entryEmployeeKey(r){
+  return r.employeeId!=null ? ('id:'+r.employeeId) : ('name:'+String(r.employeeName||'').trim());
 }
 
 function cargarListaProyectos(){
@@ -1991,8 +2005,11 @@ function renderReportes(){
     var m    = entryMin(e);
     var bill = e.billable !== false;
     totMin += m; if(bill) totBillMin += m;
-    if(!byEmp[r.employeeName]) byEmp[r.employeeName]={min:0,billMin:0};
-    byEmp[r.employeeName].min += m; if(bill) byEmp[r.employeeName].billMin += m;
+    // Agrupar por clave estable (employeeId) para que un colaborador
+    // renombrado no se parta en dos líneas — ver entryEmployeeKey.
+    var empKey = entryEmployeeKey(r);
+    if(!byEmp[empKey]) byEmp[empKey]={name:r.employeeName||'',min:0,billMin:0};
+    byEmp[empKey].min += m; if(bill) byEmp[empKey].billMin += m;
     // Agrupar por clave estable (ID cuando se puede resolver) para que un
     // proyecto renombrado no se parta en dos líneas — ver entryProjectKey.
     var prjKey = entryProjectKey(e);
@@ -2004,7 +2021,7 @@ function renderReportes(){
   var billPct = totMin > 0 ? Math.round(totBillMin/totMin*100) : 0;
   var nEmp = Object.keys(byEmp).length;
 
-  var empArr = Object.keys(byEmp).map(function(n){ return {name:n,min:byEmp[n].min,billMin:byEmp[n].billMin}; }).sort(function(a,b){ return b.min-a.min; });
+  var empArr = Object.keys(byEmp).map(function(k){ return {name:byEmp[k].name,min:byEmp[k].min,billMin:byEmp[k].billMin}; }).sort(function(a,b){ return b.min-a.min; });
   var prjArr = Object.keys(byPrj).map(function(k){ return {name:byPrj[k].label,min:byPrj[k].min,billMin:byPrj[k].billMin}; }).sort(function(a,b){ return b.min-a.min; });
   var maxEmpMin = empArr.length ? empArr[0].min : 1;
   var maxPrjMin = prjArr.length ? prjArr[0].min : 1;
