@@ -753,7 +753,7 @@ function renderMisEnvios(){
       '</div>';
   }
   // Carga desde KV (compartido entre dispositivos), fallback a localStorage
-  fetch('/api/submissions')
+  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id))
     .then(function(r){ return r.json(); })
     .then(_render)
     .catch(function(){ _render(JSON.parse(localStorage.getItem(LS_KEY)||'[]')); });
@@ -780,7 +780,7 @@ function renderMiReporte(){
   if(!currentUser) return;
   var content = document.getElementById('mr-content');
   if(!content) return;
-  fetch('/api/submissions')
+  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id))
     .then(function(r){ return r.json(); })
     .then(function(all){ pintarMiReporte(Array.isArray(all) ? all : []); })
     .catch(function(){ pintarMiReporte(_misEnviosCache || []); });
@@ -1727,7 +1727,7 @@ function renderCopiarSemanaChips(){
       return '<button type="button" class="btn btn-sm" style="background:#fff" onclick="elegirProyectoCopiado(\'' + safe + '\',' + (p.id || 'null') + ')">+ ' + p.name + '</button>';
     }).join('');
   }
-  fetch('/api/submissions').then(function(r){ return r.json(); }).then(pintar)
+  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id)).then(function(r){ return r.json(); }).then(pintar)
     .catch(function(){ pintar(_misEnviosCache); });
 }
 

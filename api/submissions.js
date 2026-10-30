@@ -1,6 +1,6 @@
 // api/submissions.js — Submissions en Postgres (Neon)
 //
-// GET    /api/submissions         → lista todas las submissions
+// GET    /api/submissions         → lista todas las submissions (?employeeId=... filtra por colaborador)
 // POST   /api/submissions         → crea una submission nueva
 // PATCH  /api/submissions?id=... → actualiza una submission (aprobar, editar)
 // DELETE /api/submissions?id=... → elimina una submission
@@ -18,7 +18,15 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const { rows } = await pool.query('SELECT data FROM submissions ORDER BY id DESC');
+      // Con ?employeeId= el filtro se hace en SQL: así no se transfiere toda
+      // la tabla desde Neon en cada consulta de un colaborador.
+      const employeeId = req.query.employeeId;
+      const { rows } = employeeId
+        ? await pool.query(
+            `SELECT data FROM submissions WHERE data->>'employeeId' = $1 ORDER BY id DESC`,
+            [String(employeeId)]
+          )
+        : await pool.query('SELECT data FROM submissions ORDER BY id DESC');
       return res.status(200).json(rows.map(r => r.data));
     }
 
