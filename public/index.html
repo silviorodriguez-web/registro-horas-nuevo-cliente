@@ -430,6 +430,33 @@ body { font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); back
 var PROXY     = '/api/humand';
 var FOLDER_ID = 1559993;
 var LS_KEY    = 'humand-horas-cliente';
+
+// Los envíos del colaborador se consultan desde varios lugares (Mis envíos, Mi reporte,
+// copiar semana anterior). Una sola descarga por colaborador durante 30 s en vez de una
+// por pantalla, y se descarta apenas esta página escribe algo en /api/submissions.
+var _subsCache = null;
+function getMisSubmissions(){
+  var uid = currentUser.id;
+  if(!_subsCache || _subsCache.uid !== uid || Date.now() - _subsCache.t > 30000){
+    var p = fetch('/api/submissions?employeeId='+encodeURIComponent(uid)).then(function(r){ return r.json(); });
+    var entry = _subsCache = { uid: uid, t: Date.now(), p: p };
+    p.catch(function(){ if(_subsCache === entry) _subsCache = null; });
+  }
+  // copia profunda: cada pantalla recibe sus propios objetos
+  return _subsCache.p.then(function(d){ return JSON.parse(JSON.stringify(d)); });
+}
+(function(){
+  var origFetch = window.fetch;
+  window.fetch = function(url, opts){
+    var p = origFetch.apply(this, arguments);
+    if(opts && opts.method && opts.method !== 'GET' && String(url).indexOf('/api/submissions') === 0){
+      _subsCache = null;
+      var reset = function(){ _subsCache = null; };
+      p.then(reset, reset);
+    }
+    return p;
+  };
+})();
 var LS_PROJECTS_KEY = 'humand-proyectos-cliente';
 // Aprobadores alternativos: cuando el supervisor principal está de vacaciones
 // Completar con los supervisores y backups del cliente
@@ -753,8 +780,7 @@ function renderMisEnvios(){
       '</div>';
   }
   // Carga desde KV (compartido entre dispositivos), fallback a localStorage
-  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id))
-    .then(function(r){ return r.json(); })
+  getMisSubmissions()
     .then(_render)
     .catch(function(){ _render(JSON.parse(localStorage.getItem(LS_KEY)||'[]')); });
 }
@@ -780,8 +806,7 @@ function renderMiReporte(){
   if(!currentUser) return;
   var content = document.getElementById('mr-content');
   if(!content) return;
-  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id))
-    .then(function(r){ return r.json(); })
+  getMisSubmissions()
     .then(function(all){ pintarMiReporte(Array.isArray(all) ? all : []); })
     .catch(function(){ pintarMiReporte(_misEnviosCache || []); });
 }
@@ -1727,7 +1752,7 @@ function renderCopiarSemanaChips(){
       return '<button type="button" class="btn btn-sm" style="background:#fff" onclick="elegirProyectoCopiado(\'' + safe + '\',' + (p.id || 'null') + ')">+ ' + p.name + '</button>';
     }).join('');
   }
-  fetch('/api/submissions?employeeId='+encodeURIComponent(currentUser.id)).then(function(r){ return r.json(); }).then(pintar)
+  getMisSubmissions().then(pintar)
     .catch(function(){ pintar(_misEnviosCache); });
 }
 
