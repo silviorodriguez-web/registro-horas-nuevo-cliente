@@ -645,7 +645,7 @@ var SRV_KEY = 'humand-admin-srv', SRV_VER_KEY = 'humand-admin-srv-ver';
 function saveSubmissions(){
   // Cambios locales: la copia del servidor deja de valer (y así no hay dos copias de ~3MB)
   try { localStorage.removeItem(SRV_KEY); localStorage.removeItem(SRV_VER_KEY); } catch(e){}
-  localStorage.setItem(LS_KEY, JSON.stringify(requests));
+  if(Array.isArray(requests)) localStorage.setItem(LS_KEY, JSON.stringify(requests));
 }
 
 // Sincroniza una submission modificada al KV (fire-and-forget)
@@ -665,6 +665,7 @@ function recargar(){
         return r.json().then(function(data){ return { data: data, ver: ver }; });
       })
       .then(function(res){
+        if(!Array.isArray(res.data)) throw new Error('Respuesta inválida de /api/submissions');
         requests = res.data;
         // Guardamos la copia con su firma; si no entra en localStorage, simplemente no hay caché
         try {
@@ -678,7 +679,8 @@ function recargar(){
       })
       .catch(function(){
         var local = localStorage.getItem(SRV_KEY) || localStorage.getItem(LS_KEY);
-        requests = JSON.parse(local||'[]');
+        try { requests = JSON.parse(local||'[]'); } catch(e){ requests = []; }
+        if(!Array.isArray(requests)) requests = [];
         _afterRecargar();
       });
   }
@@ -691,7 +693,8 @@ function recargar(){
     .then(function(r){ return r.json(); })
     .then(function(m){
       if(m && m.version === verLocal){
-        requests = JSON.parse(copia);
+        try { requests = JSON.parse(copia); } catch(e){ requests = null; }
+        if(!Array.isArray(requests)){ requests = []; bajarTodo(); return; }
         _afterRecargar();
       } else {
         bajarTodo();
